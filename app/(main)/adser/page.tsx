@@ -37,10 +37,7 @@ const formatNumber = (value: number | string, options: Intl.NumberFormatOptions 
     return num.toLocaleString('en-US', options);
 };
 
-interface DailyDataPoint {
-    date: string;
-    value: number;
-}
+interface DailyDataPoint { date: string; value: number; }
 
 interface TeamMetric {
     team_name: string;
@@ -67,34 +64,17 @@ interface TeamMetric {
     under_18_inquiries: number;
     over_50_inquiries: number;
     foreigner_inquiries: number;
+    actual_spend_daily: DailyDataPoint[];
+    total_inquiries_daily: DailyDataPoint[];
+    new_player_value_thb_daily: DailyDataPoint[];
 }
 
-interface TransformedChartData {
-    date: string;
-    [key: string]: any;
-}
-
-const teamColors: { [key: string]: string } = {
-    'Boogey': '#3b82f6', 'Bubble': '#16a34a', 'Lucifer': '#db2777', 'Risa': '#f78c00ff',
-    'Shazam': '#5f6669ff', 'Vivien': '#dc266cff', 'Sim': '#f59e0b', 'Joanne': '#0181a1ff',
-    'Cookie': '#3b82f6', 'Piea': '#16a34a', 'บาล้าน': '#db2777', 'หวยม้า': '#f78c00ff',
-    'Thomas': '#5f6669ff', 'IU': '#dc266cff', 'Nolan': '#f59e0b', 'Minho': '#0181a1ff', 'Bailu': '#3b82f6',
-};
-
-const groupYAxisMax: { [key: string]: { cpm: number; costPerDeposit: number; cover: number; } } = {
-    'สาวอ้อย': { cpm: 2.5, costPerDeposit: 35, cover: 15 },
-    'อลิน': { cpm: 2.5, costPerDeposit: 35, cover: 15 },
-    'อัญญา C': { cpm: 2.5, costPerDeposit: 35, cover: 15 },
-    'อัญญา D': { cpm: 2.5, costPerDeposit: 35, cover: 15 },
-    'Spezbar': { cpm: 4.5, costPerDeposit: 80, cover: 10 },
-    'Barlance': { cpm: 4.5, costPerDeposit: 80, cover: 10 },
-    'Football Area': { cpm: 6.5, costPerDeposit: 120, cover: 8 },
-    'Football Area(Haru)': { cpm: 6.5, costPerDeposit: 120, cover: 8 },
-};
-
+interface TransformedChartData { date: string; [key: string]: any; }
+const teamColors: { [key: string]: string } = { 'Boogey': '#3b82f6', 'Bubble': '#16a34a', 'Lucifer': '#db2777', 'Risa': '#f78c00ff', 'Shazam': '#5f6669ff', 'Vivien': '#dc266cff', 'Sim': '#f59e0b', 'Joanne': '#0181a1ff', 'Cookie': '#3b82f6', 'Piea': '#16a34a', 'บาล้าน': '#db2777', 'หวยม้า': '#f78c00ff', 'Thomas': '#5f6669ff', 'IU': '#dc266cff', 'Nolan': '#f59e0b', 'Minho': '#0181a1ff', 'Bailu': '#3b82f6', };
+const groupYAxisMax: { [key: string]: { cpm: number; costPerDeposit: number; cover: number; } } = { 'สาวอ้อย': { cpm: 2.5, costPerDeposit: 35, cover: 15 }, 'อลิน': { cpm: 2.5, costPerDeposit: 35, cover: 15 }, 'อัญญา C': { cpm: 2.5, costPerDeposit: 35, cover: 15 }, 'อัญญา D': { cpm: 2.5, costPerDeposit: 35, cover: 15 }, 'Spezbar': { cpm: 4.5, costPerDeposit: 80, cover: 10 }, 'Barlance': { cpm: 4.5, costPerDeposit: 80, cover: 10 }, 'Football Area': { cpm: 6.5, costPerDeposit: 120, cover: 8 }, 'Football Area(Haru)': { cpm: 6.5, costPerDeposit: 120, cover: 8 }, };
 const filterFrameClass = "inline-flex items-center gap-1 rounded-md border border-input bg-muted/50 h-9 px-2 shadow-sm";
 
-// --- Sub-components ---
+// --- Sub-components (Full Code) ---
 const ExchangeRateSmall = memo(({ rate, isLoading, isFallback }: { rate: number | null, isLoading: boolean, isFallback: boolean }) => {
     if (isLoading) { return <div className="bg-muted/50 rounded px-2 py-1"><div className="text-xs text-muted-foreground">฿--</div></div>; }
     return (<div className={cn("rounded px-2 py-1 text-xs font-medium", isFallback ? "bg-orange-100 text-orange-700" : "bg-blue-100 text-blue-700")}>{isFallback && "⚠️ "}฿{rate ? formatNumber(rate, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '--'}</div>);
@@ -132,14 +112,34 @@ const GroupedChart = ({ title, data, yAxisLabel, loading, teamsToShow, chartType
 };
 
 export default function AdserPage() {
+    const [isClient, setIsClient] = useState(false);
     const [chartData, setChartData] = useState<{ cpm: TransformedChartData[], costPerDeposit: TransformedChartData[], deposits: TransformedChartData[], cover: TransformedChartData[] }>({ cpm: [], costPerDeposit: [], deposits: [], cover: [] });
     const [tableDateRange, setTableDateRange] = useState<DateRange | undefined>(undefined);
-    const [graphView, setGraphView] = useState<'daily' | 'monthly'>(() => { if (typeof window === 'undefined') return 'daily'; const savedView = localStorage.getItem('graphView'); return (savedView === 'daily' || savedView === 'monthly') ? savedView : 'daily'; });
-    const [graphYear, setGraphYear] = useState(() => dayjs().year());
-    const [graphMonth, setGraphMonth] = useState(() => dayjs().month());
+    const [graphView, setGraphView] = useState<'daily' | 'monthly'>('daily');
+    const [graphYear, setGraphYear] = useState(dayjs().year());
+    const [graphMonth, setGraphMonth] = useState(dayjs().month());
     const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+    
+    useEffect(() => {
+        setIsClient(true);
+        const savedView = localStorage.getItem('graphView');
+        if (savedView === 'daily' || savedView === 'monthly') { setGraphView(savedView); }
+        const defaultThisMonth = { from: dayjs().startOf('month').toDate(), to: dayjs().endOf('day').toDate() };
+        const savedDate = localStorage.getItem('dateRangeFilterAdserTable');
+        if (savedDate) {
+            try {
+                const parsed = JSON.parse(savedDate);
+                if (parsed.from && parsed.to) { setTableDateRange({ from: dayjs(parsed.from).toDate(), to: dayjs(parsed.to).toDate() }); }
+                else { setTableDateRange(defaultThisMonth); }
+            } catch (e) { setTableDateRange(defaultThisMonth); }
+        } else { setTableDateRange(defaultThisMonth); }
+    }, []);
+
     const toggleGroup = (groupName: string) => { setExpandedGroups(prev => { const newSet = new Set(prev); if (newSet.has(groupName)) { newSet.delete(groupName); } else { newSet.add(groupName); } return newSet; }); };
-    useEffect(() => { localStorage.setItem('graphView', graphView); }, [graphView]);
+    
+    useEffect(() => { if (isClient) localStorage.setItem('graphView', graphView); }, [graphView, isClient]);
+    useEffect(() => { if (isClient && tableDateRange) { localStorage.setItem('dateRangeFilterAdserTable', JSON.stringify(tableDateRange)); } }, [tableDateRange, isClient]);
+
     const { data: exchangeRateData, isLoading: isRateLoading } = useSWR('/api/exchange-rate', fetcher, { refreshInterval: 3600000 });
     const exchangeRate = exchangeRateData?.rate ?? 36.5;
     const isRateFallback = exchangeRateData?.isFallback ?? true;
@@ -148,14 +148,101 @@ export default function AdserPage() {
     const graphApiUrl = useMemo(() => { if (!graphDateRange?.from || !graphDateRange?.to || !exchangeRate) return null; return `/api/adser?startDate=${dayjs(graphDateRange.from).format('YYYY-MM-DD')}&endDate=${dayjs(graphDateRange.to).format('YYYY-MM-DD')}&exchangeRate=${exchangeRate}`; }, [graphDateRange, exchangeRate]);
     const { data: tableData, error: tableError, isLoading: loadingTable } = useSWR<TeamMetric[]>(tableApiUrl, fetcher, { refreshInterval: 30000 });
     const { data: graphRawData, error: graphError, isLoading: loadingGraph } = useSWR<TeamMetric[]>(graphApiUrl, fetcher, { refreshInterval: 30000 });
-    useEffect(() => { const defaultThisMonth = { from: dayjs().startOf('month').toDate(), to: dayjs().endOf('day').toDate() }; const getDateRangeFromStorage = (key: string): DateRange => { const savedDate = localStorage.getItem(key); if (savedDate) { try { const parsed = JSON.parse(savedDate); if (parsed.from && parsed.to) { return { from: dayjs(parsed.from).toDate(), to: dayjs(parsed.to).toDate() }; } } catch (e) { console.error(`Failed to parse date range from ${key}:`, e); } } return defaultThisMonth; }; setTableDateRange(getDateRangeFromStorage('dateRangeFilterAdserTable')); }, []);
-    useEffect(() => { if (tableDateRange) { localStorage.setItem('dateRangeFilterAdserTable', JSON.stringify(tableDateRange)); } }, [tableDateRange]);
+    
     useEffect(() => {
-        if (!graphRawData || graphRawData.length === 0) { setChartData({ cpm: [], costPerDeposit: [], deposits: [], cover: [] }); return; }
-        const aggregateMonthly = (dailyData: DailyDataPoint[], aggregationType: 'sum' | 'avg' | 'last') => { const monthlyMap = new Map<string, { total: number, count: number, lastValue: number }>(); const sortedDailyData = [...dailyData].sort((a, b) => dayjs(a.date).diff(dayjs(b.date))); sortedDailyData.forEach(day => { const monthKey = dayjs(day.date).format('YYYY-MM-01'); if (!monthlyMap.has(monthKey)) { monthlyMap.set(monthKey, { total: 0, count: 0, lastValue: 0 }); } const month = monthlyMap.get(monthKey)!; month.total += day.value; month.count += 1; month.lastValue = day.value; }); return Array.from(monthlyMap.entries()).map(([date, values]) => { let value = 0; switch (aggregationType) { case 'sum': value = values.total; break; case 'avg': value = values.count > 0 ? values.total / values.count : 0; break; case 'last': value = values.lastValue; break; } return { date, value }; }); };
-        const transformData = (dataKey: keyof TeamMetric, monthlyAgg: 'sum' | 'avg' | 'last') => { const dateMap = new Map<string, TransformedChartData>(); graphRawData.forEach(team => { let processedData = team[dataKey] as DailyDataPoint[] || []; if (graphView === 'monthly' && Array.isArray(processedData)) { processedData = aggregateMonthly(processedData, monthlyAgg); } if (Array.isArray(processedData)) { processedData.forEach(day => { if (!dateMap.has(day.date)) { dateMap.set(day.date, { date: day.date }); } dateMap.get(day.date)![team.team_name] = day.value; }); } }); const sortedData = Array.from(dateMap.values()).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()); return sortedData.filter(d => !dayjs(d.date).isAfter(dayjs(), 'day')); };
-        setChartData({ cpm: transformData('cpm_cost_per_inquiry_daily', 'avg'), costPerDeposit: transformData('cost_per_deposit_daily', 'avg'), deposits: transformData('deposits_count_daily', 'sum'), cover: transformData('one_dollar_per_cover_daily', 'last'), });
+        if (!graphRawData || graphRawData.length === 0) {
+            setChartData({ cpm: [], costPerDeposit: [], deposits: [], cover: [] });
+            return;
+        }
+
+        const aggregateMonthly = (dailyData: DailyDataPoint[], aggregationType: 'sum' | 'last') => {
+            const monthlyMap = new Map<string, { total: number, lastValue: number }>();
+            const sortedDailyData = [...dailyData].sort((a, b) => dayjs(a.date).diff(dayjs(b.date)));
+            sortedDailyData.forEach(day => {
+                const monthKey = dayjs(day.date).format('YYYY-MM-01');
+                if (!monthlyMap.has(monthKey)) {
+                    monthlyMap.set(monthKey, { total: 0, lastValue: 0 });
+                }
+                const month = monthlyMap.get(monthKey)!;
+                month.total += day.value;
+                month.lastValue = day.value;
+            });
+            return Array.from(monthlyMap.entries()).map(([date, values]) => {
+                let value = 0;
+                switch (aggregationType) {
+                    case 'sum': value = values.total; break;
+                    case 'last': value = values.lastValue; break;
+                }
+                return { date, value };
+            });
+        };
+
+        const transformData = (dataKey: keyof TeamMetric, monthlyAgg: 'sum' | 'last') => {
+            const dateMap = new Map<string, TransformedChartData>();
+            graphRawData.forEach(team => {
+                let processedData = team[dataKey] as DailyDataPoint[] || [];
+                if (graphView === 'monthly' && Array.isArray(processedData)) {
+                    processedData = aggregateMonthly(processedData, monthlyAgg);
+                }
+                if (Array.isArray(processedData)) {
+                    processedData.forEach(day => {
+                        if (!dateMap.has(day.date)) {
+                            dateMap.set(day.date, { date: day.date });
+                        }
+                        dateMap.get(day.date)![team.team_name] = day.value;
+                    });
+                }
+            });
+            const sortedData = Array.from(dateMap.values()).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+            return sortedData.filter(d => !dayjs(d.date).isAfter(dayjs(), 'day'));
+        };
+
+        const calculateMonthlyRatio = (numeratorKey: keyof TeamMetric, denominatorKey: keyof TeamMetric) => {
+            const dateMap = new Map<string, TransformedChartData>();
+            graphRawData.forEach(team => {
+                const numeratorDaily = team[numeratorKey] as DailyDataPoint[] || [];
+                const denominatorDaily = team[denominatorKey] as DailyDataPoint[] || [];
+                const monthlyTotals = new Map<string, { numerator: number, denominator: number }>();
+
+                numeratorDaily.forEach(day => {
+                    const monthKey = dayjs(day.date).format('YYYY-MM-01');
+                    if (!monthlyTotals.has(monthKey)) { monthlyTotals.set(monthKey, { numerator: 0, denominator: 0 }); }
+                    monthlyTotals.get(monthKey)!.numerator += day.value;
+                });
+                
+                denominatorDaily.forEach(day => {
+                    const monthKey = dayjs(day.date).format('YYYY-MM-01');
+                    if (!monthlyTotals.has(monthKey)) { monthlyTotals.set(monthKey, { numerator: 0, denominator: 0 }); }
+                    monthlyTotals.get(monthKey)!.denominator += day.value;
+                });
+
+                monthlyTotals.forEach((totals, monthKey) => {
+                    if (!dateMap.has(monthKey)) { dateMap.set(monthKey, { date: monthKey }); }
+                    const value = totals.denominator > 0 ? totals.numerator / totals.denominator : 0;
+                    dateMap.get(monthKey)![team.team_name] = value;
+                });
+            });
+            const sortedData = Array.from(dateMap.values()).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+            return sortedData.filter(d => !dayjs(d.date).isAfter(dayjs(), 'day'));
+        };
+
+        if (graphView === 'monthly') {
+            setChartData({
+                cpm: calculateMonthlyRatio('actual_spend_daily', 'total_inquiries_daily'),
+                costPerDeposit: calculateMonthlyRatio('actual_spend_daily', 'deposits_count_daily'),
+                deposits: transformData('deposits_count_daily', 'sum'),
+                cover: transformData('one_dollar_per_cover_daily', 'last'),
+            });
+        } else {
+            setChartData({
+                cpm: transformData('cpm_cost_per_inquiry_daily', 'sum'),
+                costPerDeposit: transformData('cost_per_deposit_daily', 'sum'),
+                deposits: transformData('deposits_count_daily', 'sum'),
+                cover: transformData('one_dollar_per_cover_daily', 'last'),
+            });
+        }
     }, [graphRawData, graphView]);
+
     const error = tableError || graphError;
     if (error) return <p className="p-6 text-red-500">Error: {error.message}</p>;
     const monthOptions = Array.from({ length: 12 }, (_, i) => ({ label: dayjs().month(i).locale('th').format('MMMM'), value: i }));
@@ -166,15 +253,31 @@ export default function AdserPage() {
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
                 <h1 className="text-2xl font-bold tracking-tight">ภาพรวม Adser</h1>
                 <div className="flex flex-col sm:flex-row gap-2">
-                    <div><p className="text-xs text-muted-foreground mb-1 text-center sm:text-left">ข้อมูลตาราง</p><DateRangePickerWithPresets initialDateRange={tableDateRange} onDateRangeChange={setTableDateRange} /></div>
-                    <div className="flex flex-col items-center sm:items-start"><p className="text-xs text-muted-foreground mb-1">ข้อมูลกราฟ</p><div className={filterFrameClass}>{graphView === 'daily' && (<Select value={String(graphMonth)} onValueChange={(v) => setGraphMonth(Number(v))}><SelectTrigger className="h-9 border-0 shadow-none focus:ring-0 w-[120px]"><SelectValue placeholder="เลือกเดือน" /></SelectTrigger><SelectContent>{monthOptions.map(opt => <SelectItem key={opt.value} value={String(opt.value)}>{opt.label}</SelectItem>)}</SelectContent></Select>)}<Select value={String(graphYear)} onValueChange={(v) => setGraphYear(Number(v))}><SelectTrigger className="h-9 border-0 shadow-none focus:ring-0 w-[90px]"><SelectValue placeholder="เลือกปี" /></SelectTrigger><SelectContent>{yearOptions.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent></Select><div className="h-6 w-px bg-border" /><ToggleGroup type="single" value={graphView} onValueChange={(value) => { if (value) setGraphView(value as 'daily' | 'monthly'); }} aria-label="Graph View"><ToggleGroupItem value="daily" aria-label="Daily view" className="h-9 px-2.5 text-xs">รายวัน</ToggleGroupItem><ToggleGroupItem value="monthly" aria-label="Monthly view" className="h-9 px-2.5 text-xs">รายเดือน</ToggleGroupItem></ToggleGroup></div></div>
+                    <div>
+                        <p className="text-xs text-muted-foreground mb-1 text-center sm:text-left">ข้อมูลตาราง</p>
+                        {isClient ? (<DateRangePickerWithPresets initialDateRange={tableDateRange} onDateRangeChange={setTableDateRange} />) : (<Skeleton className="h-9 w-[260px]" />)}
+                    </div>
+                    <div className="flex flex-col items-center sm:items-start">
+                        <p className="text-xs text-muted-foreground mb-1">ข้อมูลกราฟ</p>
+                        {isClient ? (
+                            <div className={filterFrameClass}>
+                                {graphView === 'daily' && (<Select value={String(graphMonth)} onValueChange={(v) => setGraphMonth(Number(v))}><SelectTrigger className="h-9 border-0 shadow-none focus:ring-0 w-[120px]"><SelectValue placeholder="เลือกเดือน" /></SelectTrigger><SelectContent>{monthOptions.map(opt => <SelectItem key={opt.value} value={String(opt.value)}>{opt.label}</SelectItem>)}</SelectContent></Select>)}
+                                <Select value={String(graphYear)} onValueChange={(v) => setGraphYear(Number(v))}><SelectTrigger className="h-9 border-0 shadow-none focus:ring-0 w-[90px]"><SelectValue placeholder="เลือกปี" /></SelectTrigger><SelectContent>{yearOptions.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent></Select>
+                                <div className="h-6 w-px bg-border" />
+                                <ToggleGroup type="single" value={graphView} onValueChange={(value) => { if (value) setGraphView(value as 'daily' | 'monthly'); }} aria-label="Graph View"><ToggleGroupItem value="daily" aria-label="Daily view" className="h-9 px-2.5 text-xs">รายวัน</ToggleGroupItem><ToggleGroupItem value="monthly" aria-label="Monthly view" className="h-9 px-2.5 text-xs">รายเดือน</ToggleGroupItem></ToggleGroup>
+                            </div>
+                        ) : (<Skeleton className="h-9 w-[300px]" />)}
+                    </div>
                 </div>
             </div>
             <div className="space-y-8">
                 {Object.entries(adserTeamGroups).map(([groupName, teamNames]) => {
                     const teamsInGroup = tableData ? tableData.filter(team => teamNames.includes(team.team_name)) : [];
-                    if (loadingTable && !tableData) { return <Skeleton key={groupName} className="h-96 w-full" />; }
-                    if (teamsInGroup.length === 0) { return (<Card key={groupName} className="p-4 md:p-6 relative">{groupName === 'สาวอ้อย' && (<div className="absolute top-4 right-4"><ExchangeRateSmall rate={exchangeRate} isLoading={isRateLoading} isFallback={isRateFallback} /></div>)}<h2 className="text-2xl font-bold mb-4">{groupName}</h2><p className="text-muted-foreground">ไม่มีข้อมูลสำหรับกลุ่มนี้ในช่วงวันที่ที่เลือก</p></Card>); }
+                    if (loadingTable && !tableData && !isClient) { return <Skeleton key={groupName} className="h-96 w-full" />; }
+                    if (!teamsInGroup || teamsInGroup.length === 0) {
+                        if (loadingTable) return <Skeleton key={groupName} className="h-96 w-full" />;
+                        return (<Card key={groupName} className="p-4 md:p-6 relative">{groupName === 'สาวอ้อย' && (<div className="absolute top-4 right-4"><ExchangeRateSmall rate={exchangeRate} isLoading={isRateLoading} isFallback={isRateFallback} /></div>)}<h2 className="text-2xl font-bold mb-4">{groupName}</h2><p className="text-muted-foreground">ไม่มีข้อมูลสำหรับกลุ่มนี้ในช่วงวันที่ที่เลือก</p></Card>);
+                    }
                     const groupMaxValues = groupYAxisMax[groupName as keyof typeof groupYAxisMax];
                     return (
                         <Card key={groupName} className="p-4 md:p-6 relative">
