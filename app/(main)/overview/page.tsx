@@ -59,6 +59,8 @@ interface TeamMetric {
   under_18_inquiries: number;
   over_50_inquiries: number;
   foreigner_inquiries: number;
+  actual_spend_daily: DailyDataPoint[];
+  total_inquiries_daily: DailyDataPoint[];
 }
 interface TransformedChartData { date: string; [key: string]: any; }
 
@@ -341,31 +343,29 @@ export default function OverviewBetaPage() {
       return;
     }
 
-    const aggregateMonthly = (dailyData: DailyDataPoint[], aggregationType: 'sum' | 'avg' | 'last') => {
-      const monthlyMap = new Map<string, { total: number, count: number, lastValue: number }>();
+    const aggregateMonthly = (dailyData: DailyDataPoint[], aggregationType: 'sum' | 'last') => {
+      const monthlyMap = new Map<string, { total: number, lastValue: number }>();
       const sortedDailyData = [...dailyData].sort((a, b) => dayjs(a.date).diff(dayjs(b.date)));
       sortedDailyData.forEach(day => {
         const monthKey = dayjs(day.date).format('YYYY-MM-01');
         if (!monthlyMap.has(monthKey)) {
-          monthlyMap.set(monthKey, { total: 0, count: 0, lastValue: 0 });
+          monthlyMap.set(monthKey, { total: 0, lastValue: 0 });
         }
         const month = monthlyMap.get(monthKey)!;
         month.total += day.value;
-        month.count += 1;
         month.lastValue = day.value;
       });
       return Array.from(monthlyMap.entries()).map(([date, values]) => {
         let value = 0;
         switch (aggregationType) {
           case 'sum': value = values.total; break;
-          case 'avg': value = values.count > 0 ? values.total / values.count : 0; break;
           case 'last': value = values.lastValue; break;
         }
         return { date, value };
       });
     };
 
-    const transformData = (dataKey: keyof TeamMetric, monthlyAgg: 'sum' | 'avg' | 'last') => {
+    const transformData = (dataKey: keyof TeamMetric, monthlyAgg: 'sum' | 'last') => {
       const dateMap = new Map<string, TransformedChartData>();
       graphRawData.forEach(team => {
         let processedData = team[dataKey] as DailyDataPoint[] || [];
@@ -386,12 +386,59 @@ export default function OverviewBetaPage() {
       return sortedData.filter(d => !dayjs(d.date).isAfter(dayjs(), 'day'));
     };
 
-    setChartData({
-      cpm: transformData('cpm_cost_per_inquiry_daily', 'avg'),
-      costPerDeposit: transformData('cost_per_deposit_daily', 'avg'),
-      deposits: transformData('deposits_count_daily', 'sum'),
-      cover: transformData('one_dollar_per_cover_daily', 'last'),
-    });
+    const calculateMonthlyRatio = (numeratorKey: keyof TeamMetric, denominatorKey: keyof TeamMetric) => {
+        const dateMap = new Map<string, TransformedChartData>();
+
+        graphRawData.forEach(team => {
+            const numeratorDaily = team[numeratorKey] as DailyDataPoint[] || [];
+            const denominatorDaily = team[denominatorKey] as DailyDataPoint[] || [];
+
+            const monthlyTotals = new Map<string, { numerator: number, denominator: number }>();
+
+            numeratorDaily.forEach(day => {
+                const monthKey = dayjs(day.date).format('YYYY-MM-01');
+                if (!monthlyTotals.has(monthKey)) {
+                    monthlyTotals.set(monthKey, { numerator: 0, denominator: 0 });
+                }
+                monthlyTotals.get(monthKey)!.numerator += day.value;
+            });
+            
+            denominatorDaily.forEach(day => {
+                const monthKey = dayjs(day.date).format('YYYY-MM-01');
+                if (!monthlyTotals.has(monthKey)) {
+                    monthlyTotals.set(monthKey, { numerator: 0, denominator: 0 });
+                }
+                monthlyTotals.get(monthKey)!.denominator += day.value;
+            });
+
+            monthlyTotals.forEach((totals, monthKey) => {
+                if (!dateMap.has(monthKey)) {
+                    dateMap.set(monthKey, { date: monthKey });
+                }
+                const value = totals.denominator > 0 ? totals.numerator / totals.denominator : 0;
+                dateMap.get(monthKey)![team.team_name] = value;
+            });
+        });
+
+        const sortedData = Array.from(dateMap.values()).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        return sortedData.filter(d => !dayjs(d.date).isAfter(dayjs(), 'day'));
+    };
+
+    if (graphView === 'monthly') {
+      setChartData({
+        cpm: calculateMonthlyRatio('actual_spend_daily', 'total_inquiries_daily'),
+        costPerDeposit: calculateMonthlyRatio('actual_spend_daily', 'deposits_count_daily'),
+        deposits: transformData('deposits_count_daily', 'sum'),
+        cover: transformData('one_dollar_per_cover_daily', 'last'),
+      });
+    } else {
+      setChartData({
+        cpm: transformData('cpm_cost_per_inquiry_daily', 'sum'),
+        costPerDeposit: transformData('cost_per_deposit_daily', 'sum'),
+        deposits: transformData('deposits_count_daily', 'sum'),
+        cover: transformData('one_dollar_per_cover_daily', 'last'),
+      });
+    }
   }, [graphRawData, graphView]);
 
   const error = tableError || graphError;

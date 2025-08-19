@@ -10,7 +10,7 @@ import 'dayjs/locale/th';
 // ... (Interfaces เหมือนเดิม) ...
 interface DailyMetricsRow { team_name: string; record_date: Date; planned_inquiries: string; total_inquiries: string; wasted_inquiries: string; net_inquiries: string; planned_daily_spend: string; actual_spend: string; deposits_count: string; silent_inquiries: string; repeat_inquiries: string; existing_user_inquiries: string; spam_inquiries: string; blocked_inquiries: string; under_18_inquiries: string; over_50_inquiries: string; foreigner_inquiries: string; new_player_value_thb: string; }
 interface DailyDataPoint { date: string; value: number; }
-interface TeamMetric { team_name: string; planned_inquiries: number; total_inquiries: number; wasted_inquiries: number; net_inquiries: number; planned_daily_spend: number; actual_spend: number; cpm_cost_per_inquiry: number; facebook_cost_per_inquiry: number; deposits_count: number; inquiries_per_deposit: number; quality_inquiries_per_deposit: number; cost_per_deposit: number; new_player_value_thb: number; one_dollar_per_cover: number; page_blocks_7d: number; page_blocks_30d: number; silent_inquiries: number; repeat_inquiries: number; existing_user_inquiries: number; spam_inquiries: number; blocked_inquiries: number; under_18_inquiries: number; over_50_inquiries: number; foreigner_inquiries: number; cpm_cost_per_inquiry_daily: DailyDataPoint[]; deposits_count_daily: DailyDataPoint[]; cost_per_deposit_daily: DailyDataPoint[]; one_dollar_per_cover_daily: DailyDataPoint[]; }
+interface TeamMetric { team_name: string; planned_inquiries: number; total_inquiries: number; wasted_inquiries: number; net_inquiries: number; planned_daily_spend: number; actual_spend: number; cpm_cost_per_inquiry: number; facebook_cost_per_inquiry: number; deposits_count: number; inquiries_per_deposit: number; quality_inquiries_per_deposit: number; cost_per_deposit: number; new_player_value_thb: number; one_dollar_per_cover: number; page_blocks_7d: number; page_blocks_30d: number; silent_inquiries: number; repeat_inquiries: number; existing_user_inquiries: number; spam_inquiries: number; blocked_inquiries: number; under_18_inquiries: number; over_50_inquiries: number; foreigner_inquiries: number; cpm_cost_per_inquiry_daily: DailyDataPoint[]; deposits_count_daily: DailyDataPoint[]; cost_per_deposit_daily: DailyDataPoint[]; one_dollar_per_cover_daily: DailyDataPoint[]; actual_spend_daily: DailyDataPoint[]; total_inquiries_daily: DailyDataPoint[]; }
 
 
 export async function GET(req: NextRequest) {
@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
             const teamName = row.team_name;
             const date = dayjs(row.record_date).format('YYYY-MM-DD');
             if (!teamDataMap.has(teamName)) {
-                teamDataMap.set(teamName, { team_name: teamName, planned_inquiries: 0, total_inquiries: 0, wasted_inquiries: 0, net_inquiries: 0, planned_daily_spend: 0, actual_spend: 0, deposits_count: 0, new_player_value_thb: 0, cpm_cost_per_inquiry: 0, cost_per_deposit: 0, inquiries_per_deposit: 0, quality_inquiries_per_deposit: 0, one_dollar_per_cover: 0, page_blocks_7d: 0, page_blocks_30d: 0, silent_inquiries: 0, repeat_inquiries: 0, existing_user_inquiries: 0, spam_inquiries: 0, blocked_inquiries: 0, under_18_inquiries: 0, over_50_inquiries: 0, foreigner_inquiries: 0, cpm_cost_per_inquiry_daily: [], deposits_count_daily: [], cost_per_deposit_daily: [], one_dollar_per_cover_daily: [], facebook_cost_per_inquiry: 0 });
+                teamDataMap.set(teamName, { team_name: teamName, planned_inquiries: 0, total_inquiries: 0, wasted_inquiries: 0, net_inquiries: 0, planned_daily_spend: 0, actual_spend: 0, deposits_count: 0, new_player_value_thb: 0, cpm_cost_per_inquiry: 0, cost_per_deposit: 0, inquiries_per_deposit: 0, quality_inquiries_per_deposit: 0, one_dollar_per_cover: 0, page_blocks_7d: 0, page_blocks_30d: 0, silent_inquiries: 0, repeat_inquiries: 0, existing_user_inquiries: 0, spam_inquiries: 0, blocked_inquiries: 0, under_18_inquiries: 0, over_50_inquiries: 0, foreigner_inquiries: 0, cpm_cost_per_inquiry_daily: [], deposits_count_daily: [], cost_per_deposit_daily: [], one_dollar_per_cover_daily: [], facebook_cost_per_inquiry: 0, actual_spend_daily: [], total_inquiries_daily: [] });
             }
             const team = teamDataMap.get(teamName)!;
             const spend = Number(row.actual_spend);
@@ -70,6 +70,8 @@ export async function GET(req: NextRequest) {
             team.cpm_cost_per_inquiry_daily.push({ date, value: cmpCostDaily });
             team.deposits_count_daily.push({ date, value: deposits });
             team.cost_per_deposit_daily.push({ date, value: costPerDepositDaily });
+            team.actual_spend_daily.push({ date, value: spend });
+            team.total_inquiries_daily.push({ date, value: inquiries });
         });
 
         Array.from(teamDataMap.values()).forEach(team => {
