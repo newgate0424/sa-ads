@@ -13,7 +13,6 @@ import { Separator } from '@/components/ui/separator';
 
 const navItems = [
     { href: '/overview', label: 'Overview', icon: Home },
-    { href: '/overview-beta', label: 'Overview (Beta)', icon: TestTube2 },
     { href: '/adser', label: 'Adser', icon: Star },
     { href: '/monitor', label: 'Monitor', icon: Activity },
     { href: '/admin', label: 'User Management', icon: Users },
