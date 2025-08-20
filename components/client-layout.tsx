@@ -22,9 +22,11 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
     if (!isMounted) {
         return (
             <div className="flex h-screen overflow-hidden">
-                <Skeleton className="h-screen w-16 p-2" />
+                <div className="h-screen w-16 p-2">
+                    <div className="h-full w-full bg-gray-200 dark:bg-gray-700 animate-pulse rounded"></div>
+                </div>
                 <div className="flex-1 p-4 sm:p-6 lg:p-8 min-w-0 overflow-y-auto">
-                    <Skeleton className="h-full w-full" />
+                    <div className="h-full w-full bg-gray-200 dark:bg-gray-700 animate-pulse rounded"></div>
                 </div>
             </div>
         );
@@ -32,7 +34,11 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
 
     return (
         <div className="flex h-screen overflow-hidden">
-            <Suspense fallback={<Skeleton className="h-screen w-16 p-2" />}>
+            <Suspense fallback={
+                <div className="h-screen w-16 p-2">
+                    <div className="h-full w-full bg-gray-200 dark:bg-gray-700 animate-pulse rounded"></div>
+                </div>
+            }>
                 <Sidebar />
             </Suspense>
             

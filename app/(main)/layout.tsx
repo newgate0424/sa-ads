@@ -15,7 +15,6 @@ export default async function MainLayout({
     // ✅ เช็ค session อย่างรัดกุม
     if (!session || !session.user) {
         redirect('/');
-        return null; // เพิ่มเพื่อป้องกัน render ต่อ
     }
     
     return (

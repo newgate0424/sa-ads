@@ -1,12 +1,11 @@
+// components/settings-provider.tsx
 'use client';
 
 import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { useTheme as useNextTheme } from 'next-themes';
 import { colorThemes } from '@/lib/constants';
-import { backgroundStyles } from '@/lib/config';
 import { signOut } from 'next-auth/react';
 import { AlertDialog, AlertDialogAction, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { cn } from '@/lib/utils';
 
 type SettingsContextType = {
     isCollapsed: boolean;
@@ -27,6 +26,7 @@ type SettingsContextType = {
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
+    const [isClient, setIsClient] = useState(false);
     const [isCollapsed, setIsCollapsed] = useState(false);
     const [theme, setThemeState] = useState('system');
     const [colorTheme, setColorThemeState] = useState('theme-blue');
@@ -38,20 +38,33 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
     const { setTheme: setNextTheme } = useNextTheme();
 
+    // ✅ เช็ค client-side mounting
+    useEffect(() => {
+        setIsClient(true);
+    }, []);
+
     const checkSession = useCallback(async () => {
+        if (!isClient) return;
+        
         try {
             const res = await fetch('/api/auth/session');
+            if (!res.ok) return;
+            
             const session = await res.json();
             
             if (!session || Object.keys(session).length === 0 || !session.user) {
-                if(!showSessionExpiredDialog) setShowSessionExpiredDialog(true);
+                if (!showSessionExpiredDialog) {
+                    setShowSessionExpiredDialog(true);
+                }
             }
         } catch (error) {
             console.error('Failed to check session:', error);
         }
-    }, [showSessionExpiredDialog]);
+    }, [isClient, showSessionExpiredDialog]);
     
     useEffect(() => {
+        if (!isClient) return;
+
         const fetchSettings = async () => {
             try {
                 const res = await fetch('/api/user/settings');
@@ -79,14 +92,16 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                 setIsSettingsLoading(false);
             }
         };
+
         fetchSettings();
 
         const interval = setInterval(checkSession, 10000);
         return () => clearInterval(interval);
-
-    }, [setNextTheme, checkSession]);
+    }, [isClient, setNextTheme, checkSession]);
 
     const updateSetting = useCallback(async (newSetting: object) => {
+        if (!isClient) return;
+        
         try {
             await fetch('/api/user/settings', {
                 method: 'PUT',
@@ -96,7 +111,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         } catch (error) {
             console.error("Failed to update setting:", error);
         }
-    }, []);
+    }, [isClient]);
     
     const updateTimeRange = (range: string) => {
         setTimeRange(range);
@@ -137,6 +152,11 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         updateSidebarState, updateTheme, updateColorTheme, updateTimeRange, updateBackgroundStyle, updateFontSize,
         isSettingsLoading,
     };
+
+    // ✅ ไม่แสดงอะไรเลยถ้ายังไม่ได้ mount ใน client
+    if (!isClient) {
+        return null;
+    }
 
     return (
         <SettingsContext.Provider value={value}>

@@ -17,20 +17,15 @@ export function Providers({ children }: { children: React.ReactNode }) {
   if (!isClient) {
     return (
       <div className="min-h-screen bg-gray-100 dark:bg-gray-900 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-300"></div>
       </div>
     );
   }
 
   return (
     <SessionProvider 
-      // ✅ ปิดการ auto refetch เพื่อป้องกัน error
       refetchInterval={0}
       refetchOnWindowFocus={false}
-      // ✅ เพิ่ม error handling
-      onError={(error) => {
-        console.error('SessionProvider error:', error);
-      }}
     >
       <ThemeProvider
         attribute="class"
@@ -38,16 +33,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
         enableSystem
         disableTransitionOnChange={false}
         storageKey="theme"
-        // ✅ เพิ่ม error boundary
-        onError={(error) => {
-          console.error('ThemeProvider error:', error);
-        }}
       >
         {children}
         <Toaster 
           richColors 
           position="top-right"
-          // ✅ เพิ่ม error handling สำหรับ toaster
           closeButton
           duration={5000}
         />
