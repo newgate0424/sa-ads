@@ -2,7 +2,6 @@ import { NextAuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import { connection } from './db';
 import bcrypt from 'bcryptjs';
-import { randomBytes } from 'crypto';
 
 export const authOptions: NextAuthOptions = {
     providers: [
@@ -13,35 +12,37 @@ export const authOptions: NextAuthOptions = {
                 password: { label: "Password", type: "password" }
             },
             async authorize(credentials) {
-                if (!credentials?.username || !credentials.password) return null;
+                try {
+                    if (!credentials?.username || !credentials.password) {
+                        return null;
+                    }
 
-                const [rows]: any[] = await connection.execute(
-                    'SELECT * FROM users WHERE username = ?',
-                    [credentials.username]
-                );
-                const user = rows[0];
-
-                if (user && await bcrypt.compare(credentials.password, user.password)) {
-                    const newSessionToken = randomBytes(32).toString('hex');
-                    const now = new Date();
-
-                    await connection.execute(
-                        'UPDATE users SET session_token = ?, last_seen = ?, is_online = ? WHERE id = ?',
-                        [newSessionToken, now, true, user.id]
+                    const [rows]: any[] = await connection.execute(
+                        'SELECT * FROM users WHERE username = ?',
+                        [credentials.username]
                     );
                     
-                    await connection.execute(
-                        'INSERT INTO activity_logs (user_id, action) VALUES (?, ?)',
-                        [user.id.toString(), 'login']
-                    );
+                    if (rows.length === 0) {
+                        return null;
+                    }
 
+                    const user = rows[0];
+                    const isValidPassword = await bcrypt.compare(credentials.password, user.password);
+                    
+                    if (!isValidPassword) {
+                        return null;
+                    }
+
+                    // ✅ ส่งข้อมูลที่จำเป็นเท่านั้น
                     return { 
                         id: user.id.toString(), 
-                        name: user.username, 
-                        sessionToken: newSessionToken 
+                        name: user.username,
+                        email: `${user.username}@local.app`,
                     };
+                } catch (error) {
+                    console.error('Authorization error:', error);
+                    return null;
                 }
-                return null;
             }
         })
     ],
@@ -50,57 +51,24 @@ export const authOptions: NextAuthOptions = {
     },
     session: {
         strategy: 'jwt',
-        // --- 🟢 เพิ่มโค้ดตรงนี้ ---
-        // กำหนดอายุของ Session เป็น 24 ชั่วโมง (24 * 60 * 60 = 86400 วินาที)
-        maxAge: 24 * 60 * 60, 
-    },
-    jwt: {
-        // --- 🟢 เพิ่มโค้ดตรงนี้ ---
-        // กำหนดอายุของ JWT ให้เท่ากับ Session เพื่อความสอดคล้องกัน
         maxAge: 24 * 60 * 60,
-    },
-    // --- สิ้นสุดโค้ดที่เพิ่ม ---
-    events: {
-        async signOut({ token }) {
-            if (token.id) {
-                await connection.execute(
-                    'UPDATE users SET is_online = ? WHERE id = ?',
-                    [false, token.id]
-                );
-            }
-        }
     },
     callbacks: {
         async jwt({ token, user }) {
+            // ✅ เพิ่มข้อมูล user เข้า token ครั้งแรกที่ login
             if (user) {
                 token.id = user.id;
-                token.sessionToken = (user as any).sessionToken;
+                token.name = user.name;
+                token.email = user.email;
             }
             return token;
         },
         async session({ session, token }) {
-            if (session.user) {
-                (session.user as any).id = token.id;
-                
-                try {
-                    const [rows]: any[] = await connection.execute(
-                        'SELECT session_token FROM users WHERE id = ?',
-                        [token.id]
-                    );
-                    const latestToken = rows[0]?.session_token;
-
-                    if (latestToken !== token.sessionToken) {
-                        return null as any; 
-                    }
-                    
-                    await connection.execute(
-                        'UPDATE users SET last_seen = ? WHERE id = ?',
-                        [new Date(), token.id]
-                    );
-                } catch (error) {
-                    console.error("Database connection error in NextAuth session callback:", error);
-                    return null as any; // Return null session on database error
-                }
+            // ✅ ส่งข้อมูลจาก token ไปยัง session
+            if (token && session.user) {
+                session.user.id = token.id as string;
+                session.user.name = token.name as string;
+                session.user.email = token.email as string;
             }
             return session;
         }

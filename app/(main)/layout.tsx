@@ -1,3 +1,4 @@
+// app/(main)/layout.tsx
 import { SettingsProvider } from "@/components/settings-provider";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -11,13 +12,17 @@ export default async function MainLayout({
 }) {
     const session = await getServerSession(authOptions);
 
-    if (!session) {
+    // ✅ เช็ค session อย่างรัดกุม
+    if (!session || !session.user) {
         redirect('/');
+        return null; // เพิ่มเพื่อป้องกัน render ต่อ
     }
     
     return (
         <SettingsProvider>
-            <ClientLayout>{children}</ClientLayout>
+            <ClientLayout>
+                {children}
+            </ClientLayout>
         </SettingsProvider>
     );
 }
