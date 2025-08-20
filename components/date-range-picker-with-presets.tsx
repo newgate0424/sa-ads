@@ -1,3 +1,4 @@
+// components/date-range-picker-with-presets.tsx
 'use client';
 
 import * as React from 'react';
@@ -82,12 +83,26 @@ export function DateRangePickerWithPresets({ className, onDateRangeChange, initi
         let newDateRange: DateRange;
         const today = dayjs();
         switch (presetType) {
-            case 'thisWeek': newDateRange = { from: today.startOf('week').toDate(), to: today.toDate() }; break;
-            case 'lastWeek': const lastWeek = today.subtract(1, 'week'); newDateRange = { from: lastWeek.startOf('week').toDate(), to: lastWeek.endOf('week').toDate() }; break;
-            case 'thisMonth': newDateRange = { from: today.startOf('month').toDate(), to: today.toDate() }; break;
-            case 'lastMonth': const lastMonth = today.subtract(1, 'month'); newDateRange = { from: lastMonth.startOf('month').toDate(), to: lastMonth.endOf('month').toDate() }; break;
-            case 'thisYear': newDateRange = { from: today.startOf('year').toDate(), to: today.toDate() }; break;
-            default: return;
+            case 'thisWeek': 
+                newDateRange = { from: today.startOf('week').toDate(), to: today.toDate() }; 
+                break;
+            case 'lastWeek': 
+                const lastWeek = today.subtract(1, 'week'); 
+                newDateRange = { from: lastWeek.startOf('week').toDate(), to: lastWeek.endOf('week').toDate() }; 
+                break;
+            case 'thisMonth': 
+                // ✅ แก้ไขให้เป็นวันที่ 1 ถึงสิ้นเดือน
+                newDateRange = { from: today.startOf('month').toDate(), to: today.endOf('month').toDate() }; 
+                break;
+            case 'lastMonth': 
+                const lastMonth = today.subtract(1, 'month'); 
+                newDateRange = { from: lastMonth.startOf('month').toDate(), to: lastMonth.endOf('month').toDate() }; 
+                break;
+            case 'thisYear': 
+                newDateRange = { from: today.startOf('year').toDate(), to: today.toDate() }; 
+                break;
+            default: 
+                return;
         }
         setDate(newDateRange);
         setLocalSelectedPreset(label);
@@ -119,9 +134,7 @@ export function DateRangePickerWithPresets({ className, onDateRangeChange, initi
     return (
         <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
-                {/* --- 🟢 ส่วนที่แก้ไข --- */}
                 <Button id="date" variant={"outline"} className={cn("w-auto justify-start text-left font-normal", !date && "text-muted-foreground", className)}>
-                {/* --- สิ้นสุดส่วนที่แก้ไข --- */}
                     <CalendarIcon className="mr-1 h-4 w-4" />
                     {formatDateRange(date)}
                 </Button>

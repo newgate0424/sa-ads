@@ -1,7 +1,7 @@
 // app/(main)/overview/page.tsx
 'use client';
 
-import { useEffect, useState, memo, useMemo } from 'react';
+import { useEffect, useState, memo, useMemo, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
@@ -197,7 +197,8 @@ const BreakdownCell = memo(({ value, total }: { value: number, total: number }) 
   );
 });
 
-const GroupedChart = ({
+// ✅ ปรับปรุง GroupedChart ให้ไม่กระพริบ
+const GroupedChart = memo(({
   title, data, yAxisLabel, loading, teamsToShow, chartType, dateForTarget, yAxisDomainMax, groupName, graphView
 }: {
   title: string;
@@ -211,6 +212,20 @@ const GroupedChart = ({
   groupName?: string;
   graphView: 'daily' | 'monthly';
 }) => {
+  // ✅ ใช้ ref เพื่อเก็บข้อมูลเดิมไว้ระหว่างการ reload
+  const previousDataRef = useRef<TransformedChartData[]>([]);
+  
+  // ✅ ใช้ข้อมูลเดิมหากยังกำลัง loading
+  const displayData = useMemo(() => {
+    if (loading && previousDataRef.current.length > 0) {
+      return previousDataRef.current;
+    }
+    if (!loading && data.length > 0) {
+      previousDataRef.current = data;
+    }
+    return data;
+  }, [data, loading]);
+
   const formatYAxis = (tickItem: number) => `${yAxisLabel}${tickItem.toFixed(1)}`;
 
   const tickFormatter = (date: string) => {
@@ -244,14 +259,30 @@ const GroupedChart = ({
     return targetMap;
   }, [chartType, dateForTarget, teamsToShow, groupName, graphView]);
 
-  if (loading) { return <Skeleton className="w-full h-[250px]" />; }
+  // ✅ แสดง Skeleton เฉพาะครั้งแรกที่ไม่มีข้อมูลเลย
+  if (loading && displayData.length === 0) { 
+    return <Skeleton className="w-full h-[250px]" />; 
+  }
 
   return (
     <Card>
-      <CardHeader className="py-4"><CardTitle className="text-base">{title}</CardTitle></CardHeader>
+      <CardHeader className="py-4">
+        <CardTitle className="text-base flex items-center justify-between">
+          {title}
+          {/* ✅ แสดง loading indicator เล็กๆ ระหว่าง refresh */}
+          {loading && displayData.length > 0 && (
+            <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+          )}
+        </CardTitle>
+      </CardHeader>
       <CardContent className="h-[250px] w-full">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={{ top: 5, right: 30, left: -10, bottom: 20 }}>
+          <LineChart 
+            data={displayData} 
+            margin={{ top: 5, right: 30, left: -10, bottom: 20 }}
+            // ✅ ป้องกันการ re-render ที่ไม่จำเป็น
+            key={`${title}-${graphView}`}
+          >
             <XAxis dataKey="date" tickFormatter={tickFormatter} tick={{ fontSize: 10 }} />
             <YAxis tickFormatter={formatYAxis} tick={{ fontSize: 10 }} domain={[0, yAxisDomainMax || 'auto']} />
             <Tooltip
@@ -283,7 +314,7 @@ const GroupedChart = ({
       </CardContent>
     </Card>
   );
-};
+});
 
 export default function OverviewPage() {
   const [isClient, setIsClient] = useState(false);
@@ -335,13 +366,17 @@ export default function OverviewPage() {
     }
   }, [tableDateRange, isClient]);
 
-  // ✅ Exchange Rate with Real-time (ตลอดเวลา)
+  // ✅ Exchange Rate with Real-time - ปรับ SWR config เพื่อไม่ให้กระพริบ
   const { data: exchangeRateData, isLoading: isRateLoading } = useSWR(
     '/api/exchange-rate', 
     fetcher, 
     { 
       refreshInterval: 60000, // อัพเดททุก 1 นาที
       onSuccess: () => setLastUpdate(new Date()),
+      // ✅ เพิ่ม config เพื่อไม่ให้กระพริบ
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+      dedupingInterval: 30000, // ป้องกันการ fetch ซ้ำใน 30 วินาที
     }
   );
   
@@ -368,13 +403,17 @@ export default function OverviewPage() {
     return `/api/overview?startDate=${dayjs(graphDateRange.from).format('YYYY-MM-DD')}&endDate=${dayjs(graphDateRange.to).format('YYYY-MM-DD')}&exchangeRate=${exchangeRate}`;
   }, [graphDateRange, exchangeRate]);
 
-  // ✅ Real-time data fetching (ตลอดเวลา)
+  // ✅ Real-time data fetching - ปรับ SWR config เพื่อไม่ให้กระพริบ
   const { data: tableData, error: tableError, isLoading: loadingTable } = useSWR<TeamMetric[]>(
     tableApiUrl, 
     fetcher, 
     { 
       refreshInterval: 15000, // อัพเดททุก 15 วินาที
       onSuccess: () => setLastUpdate(new Date()),
+      // ✅ เพิ่ม config เพื่อไม่ให้กระพริบ
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+      dedupingInterval: 10000, // ป้องกันการ fetch ซ้ำใน 10 วินาที
     }
   );
 
@@ -384,6 +423,10 @@ export default function OverviewPage() {
     { 
       refreshInterval: 20000, // อัพเดททุก 20 วินาที
       onSuccess: () => setLastUpdate(new Date()),
+      // ✅ เพิ่ม config เพื่อไม่ให้กระพริบ
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+      dedupingInterval: 15000, // ป้องกันการ fetch ซ้ำใน 15 วินาที
     }
   );
 
@@ -667,7 +710,7 @@ export default function OverviewPage() {
                   </Table>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 chart-container">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">
                   <GroupedChart title="ต้นทุนทัก (CPM)" data={chartData.cpm} yAxisLabel="$" loading={loadingGraph} teamsToShow={teamNames} chartType="cpm" yAxisDomainMax={groupMaxValues?.cpm} graphView={graphView} />
                   <GroupedChart title="ต้นทุนต่อเติม" data={chartData.costPerDeposit} yAxisLabel="$" loading={loadingGraph} teamsToShow={teamNames} chartType="costPerDeposit" yAxisDomainMax={groupMaxValues?.costPerDeposit} graphView={graphView} />
                   <GroupedChart title="เป้ายอดเติม" data={chartData.deposits} yAxisLabel="" loading={loadingGraph} teamsToShow={teamNames} chartType="deposits" dateForTarget={graphDateRange?.from} graphView={graphView} />
