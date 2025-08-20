@@ -1,3 +1,4 @@
+// app/(main)/overview/page.tsx
 'use client';
 
 import { useEffect, useState, memo, useMemo } from 'react';
@@ -7,6 +8,7 @@ import { cn } from '@/lib/utils';
 import dayjs from 'dayjs';
 import 'dayjs/locale/th';
 import localizedFormat from 'dayjs/plugin/localizedFormat';
+import relativeTime from 'dayjs/plugin/relativeTime';
 import { DateRange } from 'react-day-picker';
 import { DateRangePickerWithPresets } from '@/components/date-range-picker-with-presets';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -15,15 +17,42 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, Re
 import useSWR from 'swr';
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Wifi } from 'lucide-react';
 
 dayjs.extend(localizedFormat);
+dayjs.extend(relativeTime);
 dayjs.locale('th');
 
+// ✅ Real-time Fetcher
 const fetcher = (url: string) => fetch(url).then((res) => {
   if (!res.ok) {
     throw new Error('An error occurred while fetching the data.');
   }
   return res.json();
+});
+
+// ✅ Compact Status indicator component
+const RealTimeStatus = memo(({ lastUpdate }: { lastUpdate: Date | null }) => {
+  const [timeAgo, setTimeAgo] = useState('');
+
+  useEffect(() => {
+    const updateTimeAgo = () => {
+      if (lastUpdate) {
+        setTimeAgo(dayjs(lastUpdate).fromNow());
+      }
+    };
+
+    updateTimeAgo();
+    const interval = setInterval(updateTimeAgo, 1000);
+    return () => clearInterval(interval);
+  }, [lastUpdate]);
+
+  return (
+    <div className="flex items-center gap-1 text-xs text-muted-foreground bg-muted/50 px-2 py-1 rounded-md">
+      <Wifi className="h-3 w-3 text-green-500" />
+      <span className="text-green-600">อัพเดท: {timeAgo}</span>
+    </div>
+  );
 });
 
 // --- Interfaces and Helper Functions ---
@@ -36,21 +65,21 @@ const formatNumber = (value: number | string, options: Intl.NumberFormatOptions 
 interface DailyDataPoint { date: string; value: number; }
 interface TeamMetric {
   team_name: string;
-  total_inquiries: number;
   planned_inquiries: number;
-  actual_spend: number;
-  planned_daily_spend: number;
-  net_inquiries: number;
+  total_inquiries: number;
   wasted_inquiries: number;
+  net_inquiries: number;
+  planned_daily_spend: number;
+  actual_spend: number;
   deposits_count: number;
+  new_player_value_thb: number;
   cpm_cost_per_inquiry: number;
   cost_per_deposit: number;
-  new_player_value_thb: number;
+  inquiries_per_deposit: number;
+  quality_inquiries_per_deposit: number;
   one_dollar_per_cover: number;
-  cpm_cost_per_inquiry_daily: DailyDataPoint[];
-  cost_per_deposit_daily: DailyDataPoint[];
-  deposits_count_daily: DailyDataPoint[];
-  one_dollar_per_cover_daily: DailyDataPoint[];
+  page_blocks_7d: number;
+  page_blocks_30d: number;
   silent_inquiries: number;
   repeat_inquiries: number;
   existing_user_inquiries: number;
@@ -59,6 +88,11 @@ interface TeamMetric {
   under_18_inquiries: number;
   over_50_inquiries: number;
   foreigner_inquiries: number;
+  cpm_cost_per_inquiry_daily: DailyDataPoint[];
+  deposits_count_daily: DailyDataPoint[];
+  cost_per_deposit_daily: DailyDataPoint[];
+  one_dollar_per_cover_daily: DailyDataPoint[];
+  facebook_cost_per_inquiry: number;
   actual_spend_daily: DailyDataPoint[];
   total_inquiries_daily: DailyDataPoint[];
 }
@@ -75,10 +109,9 @@ const groupYAxisMax: { [key: string]: { cpm: number; costPerDeposit: number; cov
   'Football': { cpm: 6.5, costPerDeposit: 120, cover: 8 },
 };
 
-const filterFrameClass =
-  "inline-flex items-center gap-1 rounded-md border border-input bg-muted/50 h-9 px-2 shadow-sm";
+const filterFrameClass = "inline-flex items-center gap-1 rounded-md border border-input bg-muted/50 h-9 px-2 shadow-sm";
 
-// ... (Sub-components ไม่มีการเปลี่ยนแปลง) ...
+// ... (Sub-components) ...
 const ExchangeRateSmall = memo(({ rate, isLoading, isFallback }: { rate: number | null, isLoading: boolean, isFallback: boolean }) => {
   if (isLoading) {
     return (
@@ -111,11 +144,11 @@ const ProgressCell = memo(({ value, total, isCurrency = false }: { value: number
   return (
     <div className="flex flex-col w-36">
       <div className="flex justify-between items-baseline text-sm">
-        <span className="font-semibold">{displayValue} / {displayTotal}</span>
-        <span className="font-semibold text-primary">{percentage.toFixed(1)}%</span>
+        <span className="font-semibold number-transition">{displayValue} / {displayTotal}</span>
+        <span className="font-semibold text-primary number-transition">{percentage.toFixed(1)}%</span>
       </div>
       <div className="relative h-2 w-full overflow-hidden rounded-full bg-muted mt-1">
-        <div className={cn('h-full', progressBarColor)} style={{ width: `${Math.min(percentage, 100)}%` }}></div>
+        <div className={cn('h-full progress-bar-smooth', progressBarColor)} style={{ width: `${Math.min(percentage, 100)}%` }}></div>
       </div>
     </div>
   );
@@ -252,22 +285,20 @@ const GroupedChart = ({
   );
 };
 
-export default function OverviewBetaPage() {
+export default function OverviewPage() {
   const [isClient, setIsClient] = useState(false);
   const [chartData, setChartData] = useState<{ cpm: TransformedChartData[], costPerDeposit: TransformedChartData[], deposits: TransformedChartData[], cover: TransformedChartData[] }>({ cpm: [], costPerDeposit: [], deposits: [], cover: [] });
-  
-  // --- 🟢 [แก้ไข] ตั้งค่าเริ่มต้นเป็น null หรือค่าว่างไปก่อน ---
   const [tableDateRange, setTableDateRange] = useState<DateRange | undefined>(undefined);
   const [graphView, setGraphView] = useState<'daily' | 'monthly'>('daily');
   const [graphYear, setGraphYear] = useState<number>(dayjs().year());
   const [graphMonth, setGraphMonth] = useState<number>(dayjs().month());
+  
+  // ✅ เพิ่ม Real-time state (ตลอดเวลา)
+  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
 
-  // --- 🟢 [แก้ไข] ย้าย Logic ทั้งหมดที่ขึ้นกับ Client มาไว้ใน useEffect นี้ ---
   useEffect(() => {
-    // 1. ตั้งค่า isClient เป็น true เพื่อบอกว่าเรารันบน Client แล้ว
     setIsClient(true);
 
-    // 2. ตั้งค่า Date Range จาก localStorage
     const savedDate = localStorage.getItem('dateRangeFilterBetaV6Table');
     if (savedDate) {
       try {
@@ -283,16 +314,13 @@ export default function OverviewBetaPage() {
       setTableDateRange({ from: dayjs().startOf('month').toDate(), to: dayjs().endOf('day').toDate() });
     }
 
-    // 3. ตั้งค่า Graph View จาก localStorage
     const savedView = localStorage.getItem('graphView');
     if (savedView === 'daily' || savedView === 'monthly') {
       setGraphView(savedView);
     }
     
-    // 4. ตั้งค่าปีและเดือนปัจจุบัน (ตอนนี้ปลอดภัยแล้วเพราะรันบน Client เท่านั้น)
     setGraphYear(dayjs().year());
     setGraphMonth(dayjs().month());
-
   }, []);
 
   useEffect(() => {
@@ -307,8 +335,16 @@ export default function OverviewBetaPage() {
     }
   }, [tableDateRange, isClient]);
 
-
-  const { data: exchangeRateData, isLoading: isRateLoading } = useSWR('/api/exchange-rate', fetcher, { refreshInterval: 3600000 });
+  // ✅ Exchange Rate with Real-time (ตลอดเวลา)
+  const { data: exchangeRateData, isLoading: isRateLoading } = useSWR(
+    '/api/exchange-rate', 
+    fetcher, 
+    { 
+      refreshInterval: 60000, // อัพเดททุก 1 นาที
+      onSuccess: () => setLastUpdate(new Date()),
+    }
+  );
+  
   const exchangeRate = exchangeRateData?.rate ?? 36.5;
   const isRateFallback = exchangeRateData?.isFallback ?? true;
 
@@ -332,10 +368,24 @@ export default function OverviewBetaPage() {
     return `/api/overview?startDate=${dayjs(graphDateRange.from).format('YYYY-MM-DD')}&endDate=${dayjs(graphDateRange.to).format('YYYY-MM-DD')}&exchangeRate=${exchangeRate}`;
   }, [graphDateRange, exchangeRate]);
 
-  const { data: tableData, error: tableError, isLoading: loadingTable } = useSWR<TeamMetric[]>(tableApiUrl, fetcher, { refreshInterval: 30000 });
-  const { data: graphRawData, error: graphError, isLoading: loadingGraph } = useSWR<TeamMetric[]>(graphApiUrl, fetcher, { refreshInterval: 30000 });
-  
-  // (ลบ useEffect ที่เคยใช้ตั้งค่า tableDateRange ของเก่าออก)
+  // ✅ Real-time data fetching (ตลอดเวลา)
+  const { data: tableData, error: tableError, isLoading: loadingTable } = useSWR<TeamMetric[]>(
+    tableApiUrl, 
+    fetcher, 
+    { 
+      refreshInterval: 15000, // อัพเดททุก 15 วินาที
+      onSuccess: () => setLastUpdate(new Date()),
+    }
+  );
+
+  const { data: graphRawData, error: graphError, isLoading: loadingGraph } = useSWR<TeamMetric[]>(
+    graphApiUrl, 
+    fetcher, 
+    { 
+      refreshInterval: 20000, // อัพเดททุก 20 วินาที
+      onSuccess: () => setLastUpdate(new Date()),
+    }
+  );
 
   useEffect(() => {
     if (!graphRawData || graphRawData.length === 0) {
@@ -450,13 +500,15 @@ export default function OverviewBetaPage() {
   return (
     <div className="space-y-6 p-4 sm:p-6">
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
-        <h1 className="text-2xl font-bold tracking-tight">ภาพรวมรายทีม (Beta)</h1>
+        <div className="flex items-center gap-4">
+          <h1 className="text-2xl font-bold tracking-tight">ภาพรวมรายทีม</h1>
+          <RealTimeStatus lastUpdate={lastUpdate} />
+        </div>
 
         <div className="flex flex-col sm:flex-row gap-2">
           {/* ฝั่ง "ข้อมูลตาราง" */}
           <div>
             <p className="text-xs text-muted-foreground mb-1 text-center sm:text-left">ข้อมูลตาราง</p>
-            {/* --- 🟢 [แก้ไข] ตรวจสอบ isClient เหมือนเดิม เพื่อป้องกันการกระพริบ --- */}
             {!isClient ? (
               <Skeleton className="h-9 w-[260px]" />
             ) : (
@@ -470,7 +522,6 @@ export default function OverviewBetaPage() {
           {/* ฝั่ง "ข้อมูลกราฟ" */}
           <div className="flex flex-col items-center sm:items-start">
             <p className="text-xs text-muted-foreground mb-1">ข้อมูลกราฟ</p>
-            {/* --- 🟢 [แก้ไข] ตรวจสอบ isClient เหมือนเดิม --- */}
             {!isClient ? (
               <Skeleton className="h-9 w-[300px]" />
             ) : (
@@ -581,12 +632,12 @@ export default function OverviewBetaPage() {
                         })
                         .map((team) => {
                           return (
-                            <TableRow key={team.team_name}>
+                            <TableRow key={team.team_name} className="table-row-transition">
                               <TableCell>
                                 <div className="flex items-center gap-3">
                                   <span
                                     className={cn(
-                                      'w-2.5 h-2.5 rounded-full flex-shrink-0',
+                                      'w-2.5 h-2.5 rounded-full flex-shrink-0 status-indicator',
                                       Number(team.actual_spend ?? 0) <= Number(team.planned_daily_spend ?? 0) ? 'bg-green-500' : 'bg-red-500'
                                     )}
                                   />
@@ -597,7 +648,7 @@ export default function OverviewBetaPage() {
                               <TableCell><div className="text-sm"><ProgressCell value={team.actual_spend ?? 0} total={team.planned_daily_spend ?? 0} isCurrency /></div></TableCell>
                               <TableCell><div className="text-sm"><StackedProgressCell net={team.net_inquiries ?? 0} wasted={team.wasted_inquiries ?? 0} total={team.total_inquiries ?? 0} /></div></TableCell>
                               <TableCell className="text-right"><div className="text-sm"><FinancialMetric value={team.cpm_cost_per_inquiry ?? 0} prefix="$" /></div></TableCell>
-                              <TableCell className="text-right font-semibold"><div className="text-sm">{formatNumber(team.deposits_count ?? 0)}</div></TableCell>
+                              <TableCell className="text-right font-semibold"><div className="text-sm number-transition">{formatNumber(team.deposits_count ?? 0)}</div></TableCell>
                               <TableCell className="text-right"><div className="text-sm"><FinancialMetric value={team.cost_per_deposit ?? 0} prefix="$" /></div></TableCell>
                               <TableCell className="text-right"><div className="text-sm"><FinancialMetric value={team.new_player_value_thb ?? 0} prefix="฿" /></div></TableCell>
                               <TableCell className="text-right"><div className="text-sm"><FinancialMetric value={team.one_dollar_per_cover ?? 0} prefix="$" /></div></TableCell>
@@ -616,7 +667,7 @@ export default function OverviewBetaPage() {
                   </Table>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 chart-container">
                   <GroupedChart title="ต้นทุนทัก (CPM)" data={chartData.cpm} yAxisLabel="$" loading={loadingGraph} teamsToShow={teamNames} chartType="cpm" yAxisDomainMax={groupMaxValues?.cpm} graphView={graphView} />
                   <GroupedChart title="ต้นทุนต่อเติม" data={chartData.costPerDeposit} yAxisLabel="$" loading={loadingGraph} teamsToShow={teamNames} chartType="costPerDeposit" yAxisDomainMax={groupMaxValues?.costPerDeposit} graphView={graphView} />
                   <GroupedChart title="เป้ายอดเติม" data={chartData.deposits} yAxisLabel="" loading={loadingGraph} teamsToShow={teamNames} chartType="deposits" dateForTarget={graphDateRange?.from} graphView={graphView} />

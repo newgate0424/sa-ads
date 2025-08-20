@@ -1,14 +1,14 @@
 // app/(main)/adser/page.tsx
-
 'use client';
 
-import { useEffect, useState, memo, useMemo } from 'react';
+import { useEffect, useState, memo, useMemo, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import dayjs from 'dayjs';
 import 'dayjs/locale/th';
 import localizedFormat from 'dayjs/plugin/localizedFormat';
+import relativeTime from 'dayjs/plugin/relativeTime';
 import { DateRange } from 'react-day-picker';
 import { DateRangePickerWithPresets } from '@/components/date-range-picker-with-presets';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -18,16 +18,43 @@ import useSWR from 'swr';
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ChevronsUpDown } from 'lucide-react';
+import { ChevronsUpDown, Wifi } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 
 dayjs.extend(localizedFormat);
+dayjs.extend(relativeTime);
 dayjs.locale('th');
 
+// ✅ Real-time Fetcher
 const fetcher = (url: string) => fetch(url).then((res) => {
     if (!res.ok) {
         throw new Error('An error occurred while fetching the data.');
     }
     return res.json();
+});
+
+// ✅ Compact Status indicator component
+const RealTimeStatus = memo(({ lastUpdate }: { lastUpdate: Date | null }) => {
+  const [timeAgo, setTimeAgo] = useState('');
+
+  useEffect(() => {
+    const updateTimeAgo = () => {
+      if (lastUpdate) {
+        setTimeAgo(dayjs(lastUpdate).fromNow());
+      }
+    };
+
+    updateTimeAgo();
+    const interval = setInterval(updateTimeAgo, 1000);
+    return () => clearInterval(interval);
+  }, [lastUpdate]);
+
+  return (
+    <div className="flex items-center gap-1 text-xs text-muted-foreground bg-muted/50 px-2 py-1 rounded-md">
+      <Wifi className="h-3 w-3 text-green-500" />
+      <span className="text-green-600">อัพเดท: {timeAgo}</span>
+    </div>
+  );
 });
 
 // --- Interfaces and Helper Functions ---
@@ -71,10 +98,19 @@ interface TeamMetric {
 
 interface TransformedChartData { date: string; [key: string]: any; }
 const teamColors: { [key: string]: string } = { 'Boogey': '#3b82f6', 'Bubble': '#16a34a', 'Lucifer': '#db2777', 'Risa': '#f78c00ff', 'Shazam': '#5f6669ff', 'Vivien': '#dc266cff', 'Sim': '#f59e0b', 'Joanne': '#0181a1ff', 'Cookie': '#3b82f6', 'Piea': '#16a34a', 'บาล้าน': '#db2777', 'หวยม้า': '#f78c00ff', 'Thomas': '#5f6669ff', 'IU': '#dc266cff', 'Nolan': '#f59e0b', 'Minho': '#0181a1ff', 'Bailu': '#3b82f6', };
-const groupYAxisMax: { [key: string]: { cpm: number; costPerDeposit: number; cover: number; } } = { 'สาวอ้อย': { cpm: 2.5, costPerDeposit: 35, cover: 15 }, 'อลิน': { cpm: 2.5, costPerDeposit: 35, cover: 15 }, 'อัญญา C': { cpm: 2.5, costPerDeposit: 35, cover: 15 }, 'อัญญา D': { cpm: 2.5, costPerDeposit: 35, cover: 15 }, 'Spezbar': { cpm: 4.5, costPerDeposit: 80, cover: 10 }, 'Barlance': { cpm: 4.5, costPerDeposit: 80, cover: 10 }, 'Football Area': { cpm: 6.5, costPerDeposit: 120, cover: 8 }, 'Football Area(Haru)': { cpm: 6.5, costPerDeposit: 120, cover: 8 }, };
+const groupYAxisMax: { [key: string]: { cpm: number; costPerDeposit: number; cover: number; } } = { 
+    'สาวอ้อย': { cpm: 2.5, costPerDeposit: 35, cover: 15 }, 
+    'อลิน': { cpm: 2.5, costPerDeposit: 35, cover: 15 }, 
+    'อัญญา C': { cpm: 2.5, costPerDeposit: 35, cover: 15 }, 
+    'อัญญา D': { cpm: 2.5, costPerDeposit: 35, cover: 15 }, 
+    'Spezbar': { cpm: 4.5, costPerDeposit: 80, cover: 10 }, 
+    'Barlance': { cpm: 4.5, costPerDeposit: 80, cover: 10 }, 
+    'Football Area': { cpm: 6.5, costPerDeposit: 120, cover: 8 }, 
+    'Football Area(Haru)': { cpm: 6.5, costPerDeposit: 120, cover: 8 }, 
+};
 const filterFrameClass = "inline-flex items-center gap-1 rounded-md border border-input bg-muted/50 h-9 px-2 shadow-sm";
 
-// --- Sub-components (Full Code) ---
+// --- Sub-components ---
 const ExchangeRateSmall = memo(({ rate, isLoading, isFallback }: { rate: number | null, isLoading: boolean, isFallback: boolean }) => {
     if (isLoading) { return <div className="bg-muted/50 rounded px-2 py-1"><div className="text-xs text-muted-foreground">฿--</div></div>; }
     return (<div className={cn("rounded px-2 py-1 text-xs font-medium", isFallback ? "bg-orange-100 text-orange-700" : "bg-blue-100 text-blue-700")}>{isFallback && "⚠️ "}฿{rate ? formatNumber(rate, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '--'}</div>);
@@ -84,9 +120,9 @@ const ProgressCell = memo(({ value, total, isCurrency = false }: { value: number
     let progressBarColor: string;
     if (isCurrency) { if (percentage > 150) progressBarColor = 'bg-red-500/80'; else if (percentage > 100) progressBarColor = 'bg-yellow-400/80'; else progressBarColor = 'bg-green-500/80'; }
     else { if (percentage >= 100) progressBarColor = 'bg-green-500/80'; else if (percentage >= 80) progressBarColor = 'bg-yellow-400/80'; else progressBarColor = 'bg-red-500/80'; }
-    const displayValue = isCurrency ? `$${formatNumber(value, { maximumFractionDigits: 0 })}` : formatNumber(value);
-    const displayTotal = isCurrency ? `$${formatNumber(total, { maximumFractionDigits: 0 })}` : formatNumber(total);
-    return (<div className="flex flex-col w-36"><div className="flex justify-between items-baseline text-sm"><span className="font-semibold">{displayValue} / {displayTotal}</span><span className="font-semibold text-primary">{percentage.toFixed(1)}%</span></div><div className="relative h-2 w-full overflow-hidden rounded-full bg-muted mt-1"><div className={cn('h-full', progressBarColor)} style={{ width: `${Math.min(percentage, 100)}%` }}></div></div></div>);
+    const displayValue = isCurrency ? `${formatNumber(value, { maximumFractionDigits: 0 })}` : formatNumber(value);
+    const displayTotal = isCurrency ? `${formatNumber(total, { maximumFractionDigits: 0 })}` : formatNumber(total);
+    return (<div className="flex flex-col w-36"><div className="flex justify-between items-baseline text-sm"><span className="font-semibold number-transition">{displayValue} / {displayTotal}</span><span className="font-semibold text-primary number-transition">{percentage.toFixed(1)}%</span></div><div className="relative h-2 w-full overflow-hidden rounded-full bg-muted mt-1"><div className={cn('h-full progress-bar-smooth', progressBarColor)} style={{ width: `${Math.min(percentage, 100)}%` }}></div></div></div>);
 });
 const StackedProgressCell = memo(({ net, wasted, total }: { net: number; wasted: number; total: number }) => {
     const netPercentage = total > 0 ? (net / total) * 100 : 0;
@@ -120,6 +156,9 @@ export default function AdserPage() {
     const [graphMonth, setGraphMonth] = useState(dayjs().month());
     const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
     
+    // ✅ เพิ่ม Real-time state (ตลอดเวลา)
+    const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+    
     useEffect(() => {
         setIsClient(true);
         const savedView = localStorage.getItem('graphView');
@@ -140,14 +179,48 @@ export default function AdserPage() {
     useEffect(() => { if (isClient) localStorage.setItem('graphView', graphView); }, [graphView, isClient]);
     useEffect(() => { if (isClient && tableDateRange) { localStorage.setItem('dateRangeFilterAdserTable', JSON.stringify(tableDateRange)); } }, [tableDateRange, isClient]);
 
-    const { data: exchangeRateData, isLoading: isRateLoading } = useSWR('/api/exchange-rate', fetcher, { refreshInterval: 3600000 });
+    // ✅ Exchange Rate with Real-time (ตลอดเวลา) - Fixed mutate function
+    const { data: exchangeRateData, isLoading: isRateLoading, mutate: mutateExchangeRate } = useSWR(
+        '/api/exchange-rate', 
+        fetcher, 
+        { 
+            refreshInterval: 60000, // อัพเดททุก 1 นาที
+            onSuccess: () => setLastUpdate(new Date()),
+        }
+    );
     const exchangeRate = exchangeRateData?.rate ?? 36.5;
     const isRateFallback = exchangeRateData?.isFallback ?? true;
+    
     const graphDateRange = useMemo(() => { if (graphView === 'daily') { const date = dayjs().year(graphYear).month(graphMonth); return { from: date.startOf('month').toDate(), to: date.endOf('month').toDate() }; } else { const date = dayjs().year(graphYear); return { from: date.startOf('year').toDate(), to: date.endOf('year').toDate() }; } }, [graphView, graphYear, graphMonth]);
     const tableApiUrl = useMemo(() => { if (!tableDateRange?.from || !tableDateRange?.to || !exchangeRate) return null; return `/api/adser?startDate=${dayjs(tableDateRange.from).format('YYYY-MM-DD')}&endDate=${dayjs(tableDateRange.to).format('YYYY-MM-DD')}&exchangeRate=${exchangeRate}`; }, [tableDateRange, exchangeRate]);
     const graphApiUrl = useMemo(() => { if (!graphDateRange?.from || !graphDateRange?.to || !exchangeRate) return null; return `/api/adser?startDate=${dayjs(graphDateRange.from).format('YYYY-MM-DD')}&endDate=${dayjs(graphDateRange.to).format('YYYY-MM-DD')}&exchangeRate=${exchangeRate}`; }, [graphDateRange, exchangeRate]);
-    const { data: tableData, error: tableError, isLoading: loadingTable } = useSWR<TeamMetric[]>(tableApiUrl, fetcher, { refreshInterval: 30000 });
-    const { data: graphRawData, error: graphError, isLoading: loadingGraph } = useSWR<TeamMetric[]>(graphApiUrl, fetcher, { refreshInterval: 30000 });
+    
+    // ✅ Real-time data fetching (ตลอดเวลา) - Fixed mutate functions
+    const { data: tableData, error: tableError, isLoading: loadingTable, mutate: mutateTableData } = useSWR<TeamMetric[]>(
+        tableApiUrl, 
+        fetcher, 
+        { 
+            refreshInterval: 15000, // อัพเดททุก 15 วินาที
+            onSuccess: () => setLastUpdate(new Date()),
+        }
+    );
+
+    const { data: graphRawData, error: graphError, isLoading: loadingGraph, mutate: mutateGraphData } = useSWR<TeamMetric[]>(
+        graphApiUrl, 
+        fetcher, 
+        { 
+            refreshInterval: 20000, // อัพเดททุก 20 วินาที
+            onSuccess: () => setLastUpdate(new Date()),
+        }
+    );
+
+    // ✅ Manual refresh function - Now properly defined after the SWR hooks
+    const handleManualRefresh = useCallback(async () => {
+        if (tableApiUrl) await mutateTableData();
+        if (graphApiUrl) await mutateGraphData();
+        await mutateExchangeRate();
+        setLastUpdate(new Date());
+    }, [tableApiUrl, graphApiUrl, mutateTableData, mutateGraphData, mutateExchangeRate]);
     
     useEffect(() => {
         if (!graphRawData || graphRawData.length === 0) {
@@ -251,7 +324,10 @@ export default function AdserPage() {
     return (
         <div className="space-y-6 p-4 sm:p-6">
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
-                <h1 className="text-2xl font-bold tracking-tight">ภาพรวม Adser</h1>
+                <div className="flex items-center gap-4">
+                    <h1 className="text-2xl font-bold tracking-tight">ภาพรวม Adser</h1>
+                    <RealTimeStatus lastUpdate={lastUpdate} />
+                </div>
                 <div className="flex flex-col sm:flex-row gap-2">
                     <div>
                         <p className="text-xs text-muted-foreground mb-1 text-center sm:text-left">ข้อมูลตาราง</p>
@@ -270,6 +346,7 @@ export default function AdserPage() {
                     </div>
                 </div>
             </div>
+
             <div className="space-y-8">
                 {Object.entries(adserTeamGroups).map(([groupName, teamNames]) => {
                     const teamsInGroup = tableData ? tableData.filter(team => teamNames.includes(team.team_name)) : [];
@@ -312,11 +389,11 @@ export default function AdserPage() {
                                                 {teamsInGroup.sort((a, b) => { const teamOrder = teamNames; const indexA = teamOrder.indexOf(a.team_name); const indexB = teamOrder.indexOf(b.team_name); return indexA - indexB; })
                                                     .map((team) => (
                                                         <CollapsibleTrigger asChild key={team.team_name}>
-                                                            <TableRow className="cursor-pointer hover:bg-muted/50 data-[state=open]:bg-muted/50">
+                                                            <TableRow className="cursor-pointer hover:bg-muted/50 data-[state=open]:bg-muted/50 table-row-transition">
                                                                 <TableCell>
                                                                     <div className="flex items-center justify-between">
                                                                         <div className="flex items-center gap-3">
-                                                                            <span className={cn('w-2.5 h-2.5 rounded-full flex-shrink-0', Number(team.actual_spend ?? 0) <= Number(team.planned_daily_spend ?? 0) ? 'bg-green-500' : 'bg-red-500')} />
+                                                                            <span className={cn('w-2.5 h-2.5 rounded-full flex-shrink-0 status-indicator', Number(team.actual_spend ?? 0) <= Number(team.planned_daily_spend ?? 0) ? 'bg-green-500' : 'bg-red-500')} />
                                                                             <span className="font-semibold">{team.team_name}</span>
                                                                         </div>
                                                                         <ChevronsUpDown className="h-4 w-4 text-muted-foreground transition-transform" style={{ transform: expandedGroups.has(groupName) ? 'rotate(180deg)' : 'rotate(0deg)' }} />
@@ -326,7 +403,7 @@ export default function AdserPage() {
                                                                 <TableCell><div className="text-sm"><ProgressCell value={team.actual_spend ?? 0} total={team.planned_daily_spend ?? 0} isCurrency /></div></TableCell>
                                                                 <TableCell><div className="text-sm"><StackedProgressCell net={team.net_inquiries ?? 0} wasted={team.wasted_inquiries ?? 0} total={team.total_inquiries ?? 0} /></div></TableCell>
                                                                 <TableCell className="text-right"><div className="text-sm"><FinancialMetric value={team.cpm_cost_per_inquiry ?? 0} prefix="$" /></div></TableCell>
-                                                                <TableCell className="text-right font-semibold"><div className="text-sm">{formatNumber(team.deposits_count ?? 0)}</div></TableCell>
+                                                                <TableCell className="text-right font-semibold"><div className="text-sm number-transition">{formatNumber(team.deposits_count ?? 0)}</div></TableCell>
                                                                 <TableCell className="text-right"><div className="text-sm"><FinancialMetric value={team.cost_per_deposit ?? 0} prefix="$" /></div></TableCell>
                                                                 <TableCell className="text-right"><div className="text-sm"><FinancialMetric value={team.new_player_value_thb ?? 0} prefix="฿" /></div></TableCell>
                                                                 <TableCell className="text-right"><div className="text-sm"><FinancialMetric value={team.one_dollar_per_cover ?? 0} prefix="$" /></div></TableCell>
@@ -345,7 +422,7 @@ export default function AdserPage() {
                                         </Table>
                                     </div>
                                     <CollapsibleContent>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 chart-container">
                                             <GroupedChart title="ต้นทุนทัก (CPM)" data={chartData.cpm} yAxisLabel="$" loading={loadingGraph} teamsToShow={teamNames} chartType="cpm" yAxisDomainMax={groupMaxValues?.cpm} graphView={graphView} />
                                             <GroupedChart title="ต้นทุนต่อเติม" data={chartData.costPerDeposit} yAxisLabel="$" loading={loadingGraph} teamsToShow={teamNames} chartType="costPerDeposit" yAxisDomainMax={groupMaxValues?.costPerDeposit} graphView={graphView} />
                                             <GroupedChart title="เป้ายอดเติม" data={chartData.deposits} yAxisLabel="" loading={loadingGraph} teamsToShow={teamNames} chartType="deposits" dateForTarget={graphDateRange?.from} graphView={graphView} />

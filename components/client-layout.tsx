@@ -1,14 +1,18 @@
+// components/client-layout.tsx
 'use client';
 
-import Sidebar from "@/components/layout/sidebar";
+import { Suspense, lazy } from 'react';
 import { useSettings } from "@/components/settings-provider";
 import { cn } from "@/lib/utils";
+import { Skeleton } from "@/components/ui/skeleton";
+
+// ✅ Lazy load Sidebar เพื่อความเร็ว
+const Sidebar = lazy(() => import("@/components/layout/sidebar"));
 
 export function ClientLayout({ children }: { children: React.ReactNode }) {
     const { backgroundStyle } = useSettings();
 
-    // 🟢 แก้ไข: เพิ่ม div ที่ซ่อนอยู่เพื่อบังคับให้ Tailwind รวมคลาสพื้นหลังทั้งหมด
-    // นี่คือวิธีแก้ปัญหาทั่วไปสำหรับ Tailwind เมื่อใช้คลาสแบบไดนามิก
+    // ✅ เพิ่ม div ที่ซ่อนอยู่เพื่อบังคับให้ Tailwind รวมคลาสพื้นหลังทั้งหมด
     const tailwindSafelist = (
       <div className="hidden">
         <div className="bg-gradient-default" />
@@ -24,7 +28,11 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
     
     return (
         <div className="flex h-screen overflow-hidden">
-            <Sidebar />
+            {/* ✅ ใช้ Suspense กับ Sidebar */}
+            <Suspense fallback={<Skeleton className="h-screen w-16 p-2" />}>
+                <Sidebar />
+            </Suspense>
+            
             <main className={cn(
                 "flex-1 p-4 sm:p-6 lg:p-8 min-w-0 overflow-y-auto",
                 backgroundStyle

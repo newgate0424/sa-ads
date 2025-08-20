@@ -128,3 +128,48 @@
   .preview-gradient-silver { @apply bg-gradient-to-br from-slate-100 via-gray-200 to-slate-300; }
   .preview-gradient-premium { @apply bg-gradient-to-br from-amber-200 via-yellow-500 to-orange-600; }
 }
+
+/* เพิ่มใน app/globals.css เพื่อให้การอัพเดทข้อมูลเนียนขึ้น */
+
+@layer components {
+  /* Smooth transitions for table rows */
+  .table-row-transition {
+    transition: all 0.3s ease-in-out;
+  }
+  
+  /* Smooth progress bar animations */
+  .progress-bar-smooth {
+    transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  
+  /* Smooth number animations */
+  .number-transition {
+    transition: all 0.3s ease-in-out;
+  }
+  
+  /* Pulse effect for updated data */
+  @keyframes pulse-update {
+    0% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.02); opacity: 0.8; }
+    100% { transform: scale(1); opacity: 1; }
+  }
+  
+  .data-updated {
+    animation: pulse-update 0.6s ease-in-out;
+  }
+  
+  /* Smooth chart transitions */
+  .chart-container {
+    transition: opacity 0.3s ease-in-out;
+  }
+  
+  /* Real-time status smooth animation */
+  .status-indicator {
+    transition: all 0.3s ease-in-out;
+  }
+  
+  /* Smooth background transitions */
+  .bg-muted\/50 {
+    transition: background-color 0.2s ease-in-out;
+  }
+}
