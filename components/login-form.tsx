@@ -20,22 +20,23 @@ export default function LoginForm() {
 
     const { data: session, status } = useSession();
 
-    // ✅ เพิ่ม useCallback เพื่อป้องกัน re-render ที่ไม่จำเป็น
-    const handleRedirect = useCallback(() => {
-        if (status === 'authenticated') {
-            router.replace('/overview');
-        }
-    }, [status, router]);
-
+    // ✅ แก้ไข: เพิ่ม timeout และ error handling ที่ดีขึ้น
     useEffect(() => {
-        handleRedirect();
-    }, [handleRedirect]);
+        if (status === 'authenticated' && session) {
+            console.log('User authenticated, redirecting to overview...');
+            // ✅ ใช้ replace และเพิ่ม timeout เพื่อป้องกันการค้าง
+            const timeoutId = setTimeout(() => {
+                router.replace('/overview');
+            }, 100);
+            
+            return () => clearTimeout(timeoutId);
+        }
+    }, [status, session, router]);
 
     // ✅ Prefetch หน้าสำคัญเมื่อ component mount
     useEffect(() => {
         router.prefetch('/overview');
         router.prefetch('/adser');
-        router.prefetch('/settings');
     }, [router]);
 
     const handleSubmit = useCallback(async (e: React.FormEvent) => {
@@ -44,26 +45,32 @@ export default function LoginForm() {
         setLoading(true);
 
         try {
+            console.log('Attempting login...');
             const result = await signIn('credentials', {
-                redirect: false,
+                redirect: false, // ✅ สำคัญ: ต้องเป็น false
                 username,
                 password,
             });
 
+            console.log('SignIn result:', result);
+
             if (result?.ok) {
-                // ✅ ไม่ต้องรอให้ loading เสร็จ redirect ทันที
-                router.replace('/overview');
+                console.log('Login successful');
+                // ✅ ไม่ต้อง redirect ที่นี่ ให้ useEffect ด้านบนจัดการ
+                // router.replace('/overview'); // ลบบรรทัดนี้ออก
             } else {
-                setError('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง');
+                console.log('Login failed:', result?.error);
+                setError(result?.error || 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง');
                 setLoading(false);
             }
         } catch (err) {
+            console.error('Login error:', err);
             setError('เกิดข้อผิดพลาดในการเข้าสู่ระบบ');
             setLoading(false);
         }
-    }, [username, password, router]);
+    }, [username, password]);
 
-    // ✅ ใช้ Skeleton ที่เร็วขึ้นและเบาขึ้น
+    // ✅ แก้ไข: เพิ่มการแสดง loading state ที่ชัดเจนขึ้น
     if (status === 'loading') {
         return (
             <div className="flex items-center justify-center min-h-screen bg-gray-100 dark:bg-gray-900">
@@ -75,18 +82,19 @@ export default function LoginForm() {
         );
     }
 
+    // ✅ แก้ไข: เพิ่มการแสดง loading state ระหว่าง redirect
     if (status === 'authenticated') {
-        // ✅ แสดง Loading state ระหว่าง redirect
         return (
             <div className="flex items-center justify-center min-h-screen bg-gray-100 dark:bg-gray-900">
                 <div className="flex flex-col items-center space-y-4">
                     <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                    <p className="text-sm text-muted-foreground">กำลังเข้าสู่ระบบ...</p>
+                    <p className="text-sm text-muted-foreground">เข้าสู่ระบบสำเร็จ กำลังเข้าสู่หน้าหลัก...</p>
                 </div>
             </div>
         );
     }
 
+    // ✅ แสดงฟอร์ม login เฉพาะเมื่อ status เป็น 'unauthenticated'
     if (status === 'unauthenticated') {
         return (
             <div className="flex items-center justify-center min-h-screen bg-gray-100 dark:bg-gray-900">
@@ -107,7 +115,6 @@ export default function LoginForm() {
                                         disabled={loading}
                                         autoComplete="username"
                                         autoFocus
-                                        // ✅ เพิ่ม performance optimization
                                         spellCheck={false}
                                     />
                                 </div>
@@ -121,7 +128,6 @@ export default function LoginForm() {
                                         required
                                         disabled={loading}
                                         autoComplete="current-password"
-                                        // ✅ เพิ่ม performance optimization
                                         spellCheck={false}
                                     />
                                 </div>
@@ -146,5 +152,13 @@ export default function LoginForm() {
         );
     }
 
-    return null;
+    // ✅ กรณีที่ status ไม่ตรงกับเงื่อนไขไหนเลย
+    return (
+        <div className="flex items-center justify-center min-h-screen bg-gray-100 dark:bg-gray-900">
+            <div className="flex flex-col items-center space-y-4">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <p className="text-sm text-muted-foreground">กำลังโหลด...</p>
+            </div>
+        </div>
+    );
 }

@@ -8,17 +8,15 @@ import { Toaster } from "@/components/ui/sonner";
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <SessionProvider 
-      // ✅ เพิ่ม refetchInterval เพื่อ performance
-      refetchInterval={0} 
-      // ✅ เพิ่ม refetchOnWindowFocus เพื่อ performance
-      refetchOnWindowFocus={false}
+      // ✅ ปรับ config เพื่อประสิทธิภาพและความเสถียร
+      refetchInterval={5 * 60} // เช็ค session ทุก 5 นาที
+      refetchOnWindowFocus={true} // เช็คเมื่อกลับมาที่หน้าต่าง
     >
       <ThemeProvider
         attribute="class"
         defaultTheme="system"
         enableSystem
         disableTransitionOnChange
-        // ✅ เพิ่ม storageKey เพื่อ performance
         storageKey="theme"
       >
         {children}
