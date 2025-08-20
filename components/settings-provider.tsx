@@ -52,7 +52,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
             
             const session = await res.json();
             
-            if (!session || Object.keys(session).length === 0 || !session.user) {
+            // ✅ แก้ไขการเช็ค session ให้ปลอดภัย
+            if (!session || typeof session !== 'object' || !session.user) {
                 if (!showSessionExpiredDialog) {
                     setShowSessionExpiredDialog(true);
                 }
@@ -74,17 +75,20 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                     const defaultBg = 'bg-gradient-default';
 
                     setIsCollapsed(!!data.sidebar_collapsed);
-                    setThemeState(data.theme);
-                    setColorThemeState(data.color_theme);
+                    setThemeState(data.theme || 'system');
+                    setColorThemeState(data.color_theme || 'theme-blue');
                     setTimeRange(data.last_filter_range || 'today');
                     setBackgroundStyle(data.background_style || defaultBg);
                     setFontSize(data.font_size || defaultFontSize); 
                     
-                    setNextTheme(data.theme);
-                    colorThemes.forEach(t => document.documentElement.classList.remove(t.class));
-                    document.documentElement.classList.add(data.color_theme);
+                    setNextTheme(data.theme || 'system');
                     
-                    document.documentElement.style.fontSize = data.font_size || defaultFontSize;
+                    // ✅ แก้ไขการจัดการ DOM อย่างปลอดภัย
+                    if (typeof window !== 'undefined' && document.documentElement) {
+                        colorThemes.forEach(t => document.documentElement.classList.remove(t.class));
+                        document.documentElement.classList.add(data.color_theme || 'theme-blue');
+                        document.documentElement.style.fontSize = data.font_size || defaultFontSize;
+                    }
                 }
             } catch (error) {
                 console.error("Failed to fetch settings:", error);
@@ -131,8 +135,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
     const updateColorTheme = (colorClass: string) => {
         setColorThemeState(colorClass);
-        colorThemes.forEach(t => document.documentElement.classList.remove(t.class));
-        document.documentElement.classList.add(colorClass);
+        if (typeof window !== 'undefined' && document.documentElement) {
+            colorThemes.forEach(t => document.documentElement.classList.remove(t.class));
+            document.documentElement.classList.add(colorClass);
+        }
         updateSetting({ color_theme: colorClass });
     };
 
@@ -143,7 +149,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
     const updateFontSize = (size: string) => {
         setFontSize(size);
-        document.documentElement.style.fontSize = size;
+        if (typeof window !== 'undefined' && document.documentElement) {
+            document.documentElement.style.fontSize = size;
+        }
         updateSetting({ font_size: size });
     };
     
