@@ -41,9 +41,9 @@ const fetcher = async (url: string) => {
             throw new Error(`HTTP ${res.status}: ${res.statusText}`);
         }
         return res.json();
-    } catch (error) {
+    } catch (error: unknown) {
         clearTimeout(timeoutId);
-        if (error.name === 'AbortError') {
+        if (error instanceof Error && error.name === 'AbortError') {
             throw new Error('Request timeout');
         }
         throw error;
@@ -280,7 +280,7 @@ export default function AdserPage() {
                 setLastUpdate(new Date());
                 setConnectionError(null);
             },
-            onError: (error) => {
+            onError: (error: unknown) => {
                 console.error('Exchange rate fetch error:', error);
                 setConnectionError('Failed to fetch exchange rate');
             },
@@ -317,7 +317,7 @@ export default function AdserPage() {
                 setLastUpdate(new Date());
                 setConnectionError(null);
             },
-            onError: (error) => {
+            onError: (error: unknown) => {
                 console.error('Table data fetch error:', error);
                 setConnectionError('Failed to fetch table data');
             },
@@ -339,7 +339,7 @@ export default function AdserPage() {
                 setLastUpdate(new Date());
                 setConnectionError(null);
             },
-            onError: (error) => {
+            onError: (error: unknown) => {
                 console.error('Graph data fetch error:', error);
                 setConnectionError('Failed to fetch graph data');
             },
@@ -359,7 +359,7 @@ export default function AdserPage() {
             await mutateExchangeRate();
             setLastUpdate(new Date());
             setConnectionError(null);
-        } catch (error) {
+        } catch (error: unknown) {
             console.error('Manual refresh error:', error);
             setConnectionError('Manual refresh failed');
         }
@@ -461,9 +461,10 @@ export default function AdserPage() {
 
     const error = tableError || graphError;
     if (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
         return (
             <div className="p-6 text-center">
-                <p className="text-red-500 mb-4">Error: {error.message}</p>
+                <p className="text-red-500 mb-4">Error: {errorMessage}</p>
                 {connectionError && <p className="text-orange-500 mb-4">{connectionError}</p>}
                 <button 
                     onClick={handleManualRefresh}
