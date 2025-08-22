@@ -25,13 +25,30 @@ dayjs.extend(localizedFormat);
 dayjs.extend(relativeTime);
 dayjs.locale('th');
 
-// ✅ Real-time Fetcher
-const fetcher = (url: string) => fetch(url).then((res) => {
-    if (!res.ok) {
-        throw new Error('An error occurred while fetching the data.');
+// ✅ Optimized Fetcher with better error handling
+const fetcher = async (url: string) => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+    
+    try {
+        const res = await fetch(url, { 
+            signal: controller.signal,
+            cache: 'no-store', // ป้องกัน cache issues on Vercel
+        });
+        clearTimeout(timeoutId);
+        
+        if (!res.ok) {
+            throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        }
+        return res.json();
+    } catch (error) {
+        clearTimeout(timeoutId);
+        if (error.name === 'AbortError') {
+            throw new Error('Request timeout');
+        }
+        throw error;
     }
-    return res.json();
-});
+};
 
 // ✅ Compact Status indicator component
 const RealTimeStatus = memo(({ lastUpdate }: { lastUpdate: Date | null }) => {
@@ -134,9 +151,26 @@ const BreakdownCell = memo(({ value, total }: { value: number, total: number }) 
     const percentage = total > 0 ? (value / total) * 100 : 0;
     return (<div className="text-center"><div className="font-semibold text-sm leading-center">{formatNumber(value)}</div><div className="text-xs text-muted-foreground leading-center">({percentage.toFixed(1)}%)</div></div>);
 });
-const GroupedChart = ({ title, data, yAxisLabel, loading, teamsToShow, chartType, dateForTarget, yAxisDomainMax, groupName, graphView }: { title: string; data: TransformedChartData[]; yAxisLabel: string; loading: boolean; teamsToShow: string[]; chartType: 'cpm' | 'costPerDeposit' | 'deposits' | 'cover'; dateForTarget?: Date; yAxisDomainMax?: number; groupName?: string; graphView: 'daily' | 'monthly'; }) => {
+
+// ✅ ปรับปรุง GroupedChart ให้ไม่กระพริบ
+const GroupedChart = memo(({ title, data, yAxisLabel, loading, teamsToShow, chartType, dateForTarget, yAxisDomainMax, groupName, graphView }: { title: string; data: TransformedChartData[]; yAxisLabel: string; loading: boolean; teamsToShow: string[]; chartType: 'cpm' | 'costPerDeposit' | 'deposits' | 'cover'; dateForTarget?: Date; yAxisDomainMax?: number; groupName?: string; graphView: 'daily' | 'monthly'; }) => {
+    // ✅ ใช้ ref เพื่อเก็บข้อมูลเดิมไว้ระหว่างการ reload
+    const previousDataRef = useRef<TransformedChartData[]>([]);
+    
+    // ✅ ใช้ข้อมูลเดิมหากยังกำลัง loading
+    const displayData = useMemo(() => {
+        if (loading && previousDataRef.current.length > 0) {
+            return previousDataRef.current;
+        }
+        if (!loading && data.length > 0) {
+            previousDataRef.current = data;
+        }
+        return data;
+    }, [data, loading]);
+
     const formatYAxis = (tickItem: number) => `${yAxisLabel}${tickItem.toFixed(1)}`;
     const tickFormatter = (date: string) => { if (graphView === 'monthly') { return dayjs(date).format('MMM'); } return dayjs(date).format('DD'); };
+    
     const targets = useMemo(() => {
         const targetMap = new Map<string, number>();
         if (chartType === 'cover' && groupName && coverTargets[groupName]) {
@@ -150,7 +184,7 @@ const GroupedChart = ({ title, data, yAxisLabel, loading, teamsToShow, chartType
                     targetMap.set(teamName, costPerDepositThresholds[teamName] || 0);
                 } else if (chartType === 'deposits' && dateForTarget) {
                     const monthlyTarget = depositsMonthlyTargets[teamName] || 0;
-                    const teamSize = teamsToShow.length; // ✅ นับจำนวนคนในทีม
+                    const teamSize = teamsToShow.length;
                     
                     if (graphView === 'monthly') {
                         targetMap.set(teamName, calculateMonthlyTarget(monthlyTarget, teamSize));
@@ -162,9 +196,44 @@ const GroupedChart = ({ title, data, yAxisLabel, loading, teamsToShow, chartType
         }
         return targetMap;
     }, [chartType, dateForTarget, teamsToShow, groupName, graphView]);
-    if (loading) { return <Skeleton className="w-full h-[250px]" />; }
-    return (<Card><CardHeader className="py-4"><CardTitle className="text-base">{title}</CardTitle></CardHeader><CardContent className="h-[250px] w-full"><ResponsiveContainer width="100%" height="100%"><LineChart data={data} margin={{ top: 5, right: 30, left: -10, bottom: 20 }}><XAxis dataKey="date" tickFormatter={tickFormatter} tick={{ fontSize: 10 }} /><YAxis tickFormatter={formatYAxis} tick={{ fontSize: 10 }} domain={[0, yAxisDomainMax || 'auto']} /><Tooltip contentStyle={{ backgroundColor: 'hsl(var(--background))', borderColor: 'hsl(var(--border))' }} formatter={(value: number, name: string) => [`${yAxisLabel}${formatNumber(value, { maximumFractionDigits: 2 })}`, name]} labelFormatter={(label) => dayjs(label).format('D MMMM YYYY')} /><Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />{teamsToShow.map(teamName => (<Line key={teamName} type="monotone" dataKey={teamName} stroke={teamColors[teamName] || '#8884d8'} strokeWidth={1.5} dot={{ r: 2 }} activeDot={{ r: 5 }} />))}{chartType === 'cover' && groupName && coverTargets[groupName] && (<ReferenceLine y={coverTargets[groupName]} stroke="#ef4444" strokeDasharray="6 6" strokeWidth={1}><Label value={`${coverTargets[groupName]}`} position="right" fill="#ef4444" fontSize={11} fontWeight="normal" /></ReferenceLine>)}{chartType !== 'cover' && Array.from(targets.entries()).map(([teamName, targetValue]) => { if (targetValue > 0) { return (<ReferenceLine key={`${teamName}-target`} y={targetValue} stroke={teamColors[teamName] || '#8884d8'} strokeDasharray="4 4" strokeWidth={1}><Label value={formatNumber(targetValue, { maximumFractionDigits: 2 })} position="right" fill={teamColors[teamName] || '#8884d8'} fontSize={10} /></ReferenceLine>); } return null; })}</LineChart></ResponsiveContainer></CardContent></Card>);
-};
+
+    // ✅ แสดง Skeleton เฉพาะครั้งแรกที่ไม่มีข้อมูลเลย
+    if (loading && displayData.length === 0) { 
+        return <Skeleton className="w-full h-[250px]" />; 
+    }
+
+    return (
+        <Card>
+            <CardHeader className="py-4">
+                <CardTitle className="text-base flex items-center justify-between">
+                    {title}
+                    {/* ✅ แสดง loading indicator เล็กๆ ระหว่าง refresh */}
+                    {loading && displayData.length > 0 && (
+                        <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                    )}
+                </CardTitle>
+            </CardHeader>
+            <CardContent className="h-[250px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                    <LineChart 
+                        data={displayData} 
+                        margin={{ top: 5, right: 30, left: -10, bottom: 20 }}
+                        // ✅ ป้องกันการ re-render ที่ไม่จำเป็น
+                        key={`${title}-${graphView}`}
+                    >
+                        <XAxis dataKey="date" tickFormatter={tickFormatter} tick={{ fontSize: 10 }} />
+                        <YAxis tickFormatter={formatYAxis} tick={{ fontSize: 10 }} domain={[0, yAxisDomainMax || 'auto']} />
+                        <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--background))', borderColor: 'hsl(var(--border))' }} formatter={(value: number, name: string) => [`${yAxisLabel}${formatNumber(value, { maximumFractionDigits: 2 })}`, name]} labelFormatter={(label) => dayjs(label).format('D MMMM YYYY')} />
+                        <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
+                        {teamsToShow.map(teamName => (<Line key={teamName} type="monotone" dataKey={teamName} stroke={teamColors[teamName] || '#8884d8'} strokeWidth={1.5} dot={{ r: 2 }} activeDot={{ r: 5 }} />))}
+                        {chartType === 'cover' && groupName && coverTargets[groupName] && (<ReferenceLine y={coverTargets[groupName]} stroke="#ef4444" strokeDasharray="6 6" strokeWidth={1}><Label value={`${coverTargets[groupName]}`} position="right" fill="#ef4444" fontSize={11} fontWeight="normal" /></ReferenceLine>)}
+                        {chartType !== 'cover' && Array.from(targets.entries()).map(([teamName, targetValue]) => { if (targetValue > 0) { return (<ReferenceLine key={`${teamName}-target`} y={targetValue} stroke={teamColors[teamName] || '#8884d8'} strokeDasharray="4 4" strokeWidth={1}><Label value={formatNumber(targetValue, { maximumFractionDigits: 2 })} position="right" fill={teamColors[teamName] || '#8884d8'} fontSize={10} /></ReferenceLine>); } return null; })}
+                    </LineChart>
+                </ResponsiveContainer>
+            </CardContent>
+        </Card>
+    );
+});
 
 export default function AdserPage() {
     const [isClient, setIsClient] = useState(false);
@@ -175,8 +244,11 @@ export default function AdserPage() {
     const [graphMonth, setGraphMonth] = useState(dayjs().month());
     const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
     
-    // ✅ เพิ่ม Real-time state (ตลอดเวลา)
+    // ✅ เพิ่ม Real-time state
     const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+    
+    // ✅ เพิ่ม error state
+    const [connectionError, setConnectionError] = useState<string | null>(null);
     
     useEffect(() => {
         setIsClient(true);
@@ -198,61 +270,105 @@ export default function AdserPage() {
     useEffect(() => { if (isClient) localStorage.setItem('graphView', graphView); }, [graphView, isClient]);
     useEffect(() => { if (isClient && tableDateRange) { localStorage.setItem('dateRangeFilterAdserTable', JSON.stringify(tableDateRange)); } }, [tableDateRange, isClient]);
 
-    // ✅ Exchange Rate with Real-time (ตลอดเวลา) - Fixed mutate function
+    // ✅ Exchange Rate with optimized SWR
     const { data: exchangeRateData, isLoading: isRateLoading, mutate: mutateExchangeRate } = useSWR(
         '/api/exchange-rate', 
         fetcher, 
         { 
-            refreshInterval: 60000, // อัพเดททุก 1 นาที
-            onSuccess: () => setLastUpdate(new Date()),
+            refreshInterval: 300000, // ✅ ลดเป็น 5 นาที
+            onSuccess: () => {
+                setLastUpdate(new Date());
+                setConnectionError(null);
+            },
+            onError: (error) => {
+                console.error('Exchange rate fetch error:', error);
+                setConnectionError('Failed to fetch exchange rate');
+            },
+            revalidateOnFocus: false,
+            revalidateOnReconnect: true,
+            dedupingInterval: 120000, // 2 นาที
+            errorRetryCount: 3,
+            errorRetryInterval: 5000,
         }
     );
     const exchangeRate = exchangeRateData?.rate ?? 36.5;
     const isRateFallback = exchangeRateData?.isFallback ?? true;
     
     const graphDateRange = useMemo(() => { if (graphView === 'daily') { const date = dayjs().year(graphYear).month(graphMonth); return { from: date.startOf('month').toDate(), to: date.endOf('month').toDate() }; } else { const date = dayjs().year(graphYear); return { from: date.startOf('year').toDate(), to: date.endOf('year').toDate() }; } }, [graphView, graphYear, graphMonth]);
-    const tableApiUrl = useMemo(() => { if (!tableDateRange?.from || !tableDateRange?.to || !exchangeRate) return null; return `/api/adser?startDate=${dayjs(tableDateRange.from).format('YYYY-MM-DD')}&endDate=${dayjs(tableDateRange.to).format('YYYY-MM-DD')}&exchangeRate=${exchangeRate}`; }, [tableDateRange, exchangeRate]);
-    const graphApiUrl = useMemo(() => { if (!graphDateRange?.from || !graphDateRange?.to || !exchangeRate) return null; return `/api/adser?startDate=${dayjs(graphDateRange.from).format('YYYY-MM-DD')}&endDate=${dayjs(graphDateRange.to).format('YYYY-MM-DD')}&exchangeRate=${exchangeRate}`; }, [graphDateRange, exchangeRate]);
     
-    // ✅ Real-time data fetching - ปรับ SWR config เพื่อไม่ให้กระพริบ
+    // ✅ Memoize API URLs with stable references
+    const tableApiUrl = useMemo(() => { 
+        if (!tableDateRange?.from || !tableDateRange?.to || !exchangeRate) return null; 
+        return `/api/adser?startDate=${dayjs(tableDateRange.from).format('YYYY-MM-DD')}&endDate=${dayjs(tableDateRange.to).format('YYYY-MM-DD')}&exchangeRate=${exchangeRate}`;
+    }, [tableDateRange?.from, tableDateRange?.to, exchangeRate]);
+    
+    const graphApiUrl = useMemo(() => { 
+        if (!graphDateRange?.from || !graphDateRange?.to || !exchangeRate) return null; 
+        return `/api/adser?startDate=${dayjs(graphDateRange.from).format('YYYY-MM-DD')}&endDate=${dayjs(graphDateRange.to).format('YYYY-MM-DD')}&exchangeRate=${exchangeRate}`;
+    }, [graphDateRange?.from, graphDateRange?.to, exchangeRate]);
+    
+    // ✅ Optimized SWR for table data
     const { data: tableData, error: tableError, isLoading: loadingTable, mutate: mutateTableData } = useSWR<TeamMetric[]>(
         tableApiUrl, 
         fetcher, 
         { 
-            refreshInterval: 15000, // อัพเดททุก 15 วินาที
-            onSuccess: () => setLastUpdate(new Date()),
-            // ✅ เพิ่ม config เพื่อไม่ให้กระพริบ
+            refreshInterval: 60000, // ✅ ลดเป็น 1 นาที
+            onSuccess: () => {
+                setLastUpdate(new Date());
+                setConnectionError(null);
+            },
+            onError: (error) => {
+                console.error('Table data fetch error:', error);
+                setConnectionError('Failed to fetch table data');
+            },
             revalidateOnFocus: false,
-            revalidateOnReconnect: false,
-            dedupingInterval: 10000, // ป้องกันการ fetch ซ้ำใน 10 วินาที
+            revalidateOnReconnect: true,
+            dedupingInterval: 30000,
+            errorRetryCount: 3,
+            errorRetryInterval: 10000,
         }
     );
 
+    // ✅ Optimized SWR for graph data  
     const { data: graphRawData, error: graphError, isLoading: loadingGraph, mutate: mutateGraphData } = useSWR<TeamMetric[]>(
         graphApiUrl, 
         fetcher, 
         { 
-            refreshInterval: 20000, // อัพเดททุก 20 วินาที
-            onSuccess: () => setLastUpdate(new Date()),
-            // ✅ เพิ่ม config เพื่อไม่ให้กระพริบ
+            refreshInterval: 120000, // ✅ ลดเป็น 2 นาที
+            onSuccess: () => {
+                setLastUpdate(new Date());
+                setConnectionError(null);
+            },
+            onError: (error) => {
+                console.error('Graph data fetch error:', error);
+                setConnectionError('Failed to fetch graph data');
+            },
             revalidateOnFocus: false,
-            revalidateOnReconnect: false,
-            dedupingInterval: 15000, // ป้องกันการ fetch ซ้ำใน 15 วินาที
+            revalidateOnReconnect: true,
+            dedupingInterval: 60000,
+            errorRetryCount: 3,
+            errorRetryInterval: 15000,
         }
     );
 
-    // ✅ Manual refresh function - Now properly defined after the SWR hooks
+    // ✅ Manual refresh function
     const handleManualRefresh = useCallback(async () => {
-        if (tableApiUrl) await mutateTableData();
-        if (graphApiUrl) await mutateGraphData();
-        await mutateExchangeRate();
-        setLastUpdate(new Date());
+        try {
+            if (tableApiUrl) await mutateTableData();
+            if (graphApiUrl) await mutateGraphData();
+            await mutateExchangeRate();
+            setLastUpdate(new Date());
+            setConnectionError(null);
+        } catch (error) {
+            console.error('Manual refresh error:', error);
+            setConnectionError('Manual refresh failed');
+        }
     }, [tableApiUrl, graphApiUrl, mutateTableData, mutateGraphData, mutateExchangeRate]);
     
+    // ✅ Stable chart data processing
     useEffect(() => {
         if (!graphRawData || graphRawData.length === 0) {
-            setChartData({ cpm: [], costPerDeposit: [], deposits: [], cover: [] });
-            return;
+            return; // ✅ ไม่ reset chartData ถ้าไม่มีข้อมูลใหม่
         }
 
         const aggregateMonthly = (dailyData: DailyDataPoint[], aggregationType: 'sum' | 'last') => {
@@ -344,7 +460,21 @@ export default function AdserPage() {
     }, [graphRawData, graphView]);
 
     const error = tableError || graphError;
-    if (error) return <p className="p-6 text-red-500">Error: {error.message}</p>;
+    if (error) {
+        return (
+            <div className="p-6 text-center">
+                <p className="text-red-500 mb-4">Error: {error.message}</p>
+                {connectionError && <p className="text-orange-500 mb-4">{connectionError}</p>}
+                <button 
+                    onClick={handleManualRefresh}
+                    className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+                >
+                    Retry
+                </button>
+            </div>
+        );
+    }
+
     const monthOptions = Array.from({ length: 12 }, (_, i) => ({ label: dayjs().month(i).locale('th').format('MMMM'), value: i }));
     const yearOptions = Array.from({ length: 5 }, (_, i) => dayjs().year() - i);
 
@@ -354,6 +484,11 @@ export default function AdserPage() {
                 <div className="flex items-center gap-4">
                     <h1 className="text-2xl font-bold tracking-tight">ภาพรวม Adser</h1>
                     <RealTimeStatus lastUpdate={lastUpdate} />
+                    {connectionError && (
+                        <div className="text-xs text-orange-600 bg-orange-100 px-2 py-1 rounded">
+                            {connectionError}
+                        </div>
+                    )}
                 </div>
                 <div className="flex flex-col sm:flex-row gap-2">
                     <div>
