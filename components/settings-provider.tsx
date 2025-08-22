@@ -43,6 +43,20 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         setIsClient(true);
     }, []);
 
+    // ✅ เพิ่ม heartbeat function
+    const sendHeartbeat = useCallback(async () => {
+        if (!isClient) return;
+        
+        try {
+            await fetch('/api/heartbeat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+            });
+        } catch (error) {
+            console.error('Heartbeat failed:', error);
+        }
+    }, [isClient]);
+
     const checkSession = useCallback(async () => {
         if (!isClient) return;
         
@@ -57,11 +71,14 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                 if (!showSessionExpiredDialog) {
                     setShowSessionExpiredDialog(true);
                 }
+            } else {
+                // ✅ ส่ง heartbeat เมื่อ session ยังใช้งานได้
+                await sendHeartbeat();
             }
         } catch (error) {
             console.error('Failed to check session:', error);
         }
-    }, [isClient, showSessionExpiredDialog]);
+    }, [isClient, showSessionExpiredDialog, sendHeartbeat]);
     
     useEffect(() => {
         if (!isClient) return;
@@ -99,9 +116,17 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
         fetchSettings();
 
-        const interval = setInterval(checkSession, 10000);
-        return () => clearInterval(interval);
-    }, [isClient, setNextTheme, checkSession]);
+        // ✅ เพิ่ม heartbeat ทุก 30 วินาที
+        const heartbeatInterval = setInterval(sendHeartbeat, 30000);
+        
+        // ✅ ตรวจสอบ session ทุก 10 วินาที
+        const sessionInterval = setInterval(checkSession, 10000);
+        
+        return () => {
+            clearInterval(heartbeatInterval);
+            clearInterval(sessionInterval);
+        };
+    }, [isClient, setNextTheme, checkSession, sendHeartbeat]);
 
     const updateSetting = useCallback(async (newSetting: object) => {
         if (!isClient) return;

@@ -33,6 +33,18 @@ export const authOptions: NextAuthOptions = {
                         return null;
                     }
 
+                    // ✅ เพิ่มการอัพเดต last_seen และ activity log
+                    const now = new Date();
+                    await connection.execute(
+                        'UPDATE users SET last_seen = ? WHERE id = ?',
+                        [now, user.id]
+                    );
+
+                    await connection.execute(
+                        'INSERT INTO activity_logs (user_id, action) VALUES (?, ?)',
+                        [user.id, 'login']
+                    );
+
                     // ✅ ส่งข้อมูลที่จำเป็นเท่านั้น
                     return { 
                         id: user.id.toString(), 
@@ -69,6 +81,16 @@ export const authOptions: NextAuthOptions = {
                 session.user.id = token.id;
                 session.user.name = token.name;
                 session.user.email = token.email;
+                
+                // ✅ อัพเดต last_seen ทุกครั้งที่มีการตรวจสอบ session
+                try {
+                    await connection.execute(
+                        'UPDATE users SET last_seen = ? WHERE username = ?',
+                        [new Date(), token.name]
+                    );
+                } catch (error) {
+                    console.error('Error updating last_seen:', error);
+                }
             }
             return session;
         }
