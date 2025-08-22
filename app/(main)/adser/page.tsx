@@ -1,7 +1,7 @@
 // app/(main)/adser/page.tsx
 'use client';
 
-import { useEffect, useState, memo, useMemo, useCallback } from 'react';
+import { useEffect, useState, memo, useMemo, useCallback, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
@@ -214,13 +214,17 @@ export default function AdserPage() {
     const tableApiUrl = useMemo(() => { if (!tableDateRange?.from || !tableDateRange?.to || !exchangeRate) return null; return `/api/adser?startDate=${dayjs(tableDateRange.from).format('YYYY-MM-DD')}&endDate=${dayjs(tableDateRange.to).format('YYYY-MM-DD')}&exchangeRate=${exchangeRate}`; }, [tableDateRange, exchangeRate]);
     const graphApiUrl = useMemo(() => { if (!graphDateRange?.from || !graphDateRange?.to || !exchangeRate) return null; return `/api/adser?startDate=${dayjs(graphDateRange.from).format('YYYY-MM-DD')}&endDate=${dayjs(graphDateRange.to).format('YYYY-MM-DD')}&exchangeRate=${exchangeRate}`; }, [graphDateRange, exchangeRate]);
     
-    // ✅ Real-time data fetching (ตลอดเวลา) - Fixed mutate functions
+    // ✅ Real-time data fetching - ปรับ SWR config เพื่อไม่ให้กระพริบ
     const { data: tableData, error: tableError, isLoading: loadingTable, mutate: mutateTableData } = useSWR<TeamMetric[]>(
         tableApiUrl, 
         fetcher, 
         { 
             refreshInterval: 15000, // อัพเดททุก 15 วินาที
             onSuccess: () => setLastUpdate(new Date()),
+            // ✅ เพิ่ม config เพื่อไม่ให้กระพริบ
+            revalidateOnFocus: false,
+            revalidateOnReconnect: false,
+            dedupingInterval: 10000, // ป้องกันการ fetch ซ้ำใน 10 วินาที
         }
     );
 
@@ -230,6 +234,10 @@ export default function AdserPage() {
         { 
             refreshInterval: 20000, // อัพเดททุก 20 วินาที
             onSuccess: () => setLastUpdate(new Date()),
+            // ✅ เพิ่ม config เพื่อไม่ให้กระพริบ
+            revalidateOnFocus: false,
+            revalidateOnReconnect: false,
+            dedupingInterval: 15000, // ป้องกันการ fetch ซ้ำใน 15 วินาที
         }
     );
 
