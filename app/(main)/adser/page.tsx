@@ -12,7 +12,7 @@ import relativeTime from 'dayjs/plugin/relativeTime';
 import { DateRange } from 'react-day-picker';
 import { DateRangePickerWithPresets } from '@/components/date-range-picker-with-presets';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { adserTeamGroups, cpmThresholds, costPerDepositThresholds, depositsMonthlyTargets, calculateDailyTarget, coverTargets } from '@/lib/adser-config';
+import { adserTeamGroups, cpmThresholds, costPerDepositThresholds, depositsMonthlyTargets, calculateDailyTarget, calculateMonthlyTarget, coverTargets } from '@/lib/adser-config';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, ReferenceLine, Label } from 'recharts';
 import useSWR from 'swr';
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -139,8 +139,27 @@ const GroupedChart = ({ title, data, yAxisLabel, loading, teamsToShow, chartType
     const tickFormatter = (date: string) => { if (graphView === 'monthly') { return dayjs(date).format('MMM'); } return dayjs(date).format('DD'); };
     const targets = useMemo(() => {
         const targetMap = new Map<string, number>();
-        if (chartType === 'cover' && groupName && coverTargets[groupName]) { const groupTarget = coverTargets[groupName]; teamsToShow.forEach(teamName => targetMap.set(teamName, groupTarget)); }
-        else { teamsToShow.forEach(teamName => { if (chartType === 'cpm') { targetMap.set(teamName, cpmThresholds[teamName] || 0); } else if (chartType === 'costPerDeposit') { targetMap.set(teamName, costPerDepositThresholds[teamName] || 0); } else if (chartType === 'deposits' && dateForTarget) { const monthlyTarget = depositsMonthlyTargets[teamName] || 0; if (graphView === 'monthly') { targetMap.set(teamName, monthlyTarget); } else { targetMap.set(teamName, calculateDailyTarget(monthlyTarget, dayjs(dateForTarget).format('YYYY-MM-DD'))); } } }); }
+        if (chartType === 'cover' && groupName && coverTargets[groupName]) {
+            const groupTarget = coverTargets[groupName];
+            teamsToShow.forEach(teamName => targetMap.set(teamName, groupTarget));
+        } else {
+            teamsToShow.forEach(teamName => {
+                if (chartType === 'cpm') {
+                    targetMap.set(teamName, cpmThresholds[teamName] || 0);
+                } else if (chartType === 'costPerDeposit') {
+                    targetMap.set(teamName, costPerDepositThresholds[teamName] || 0);
+                } else if (chartType === 'deposits' && dateForTarget) {
+                    const monthlyTarget = depositsMonthlyTargets[teamName] || 0;
+                    const teamSize = teamsToShow.length; // ✅ นับจำนวนคนในทีม
+                    
+                    if (graphView === 'monthly') {
+                        targetMap.set(teamName, calculateMonthlyTarget(monthlyTarget, teamSize));
+                    } else {
+                        targetMap.set(teamName, calculateDailyTarget(monthlyTarget, dayjs(dateForTarget).format('YYYY-MM-DD'), teamSize));
+                    }
+                }
+            });
+        }
         return targetMap;
     }, [chartType, dateForTarget, teamsToShow, groupName, graphView]);
     if (loading) { return <Skeleton className="w-full h-[250px]" />; }

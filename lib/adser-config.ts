@@ -73,9 +73,8 @@ export const costPerDepositYAxisMax: { [key: string]: number } = {
 export const depositsMonthlyTargets: { [key: string]: number } = {
     'Boogey': 1400, 'Bubble': 1400, 'Lucifer': 1400, 'Risa': 1400,
     'Shazam': 1400, 'Vivien': 1400, 'Sim': 1400, 'Joanne': 1400,
-    'Cookie': 1200, 'Piea': 600, 'บาล้าน': 900, 'หวยม้า': 450,
-    'Thomas': 1400, 'IU': 1400, 'Nolan': 1400, 'Minho': 1200, 'Bailu': 600,
-
+    'Cookie': 1200, 'Piea': 1200, 'บาล้าน': 600, 'หวยม้า': 600,
+    'Thomas': 900, 'IU': 900, 'Nolan': 900, 'Minho': 450, 'Bailu': 450,
 };
 
 export const coverTargets: { [key: string]: number } = {
@@ -84,12 +83,17 @@ export const coverTargets: { [key: string]: number } = {
     'Football Area': 25, 'Football Area(Haru)': 25,
 };
 
-
-export const calculateDailyTarget = (monthlyTarget: number, dateString: string): number => {
+// ✅ เพิ่ม parameter teamSize เพื่อหารตามจำนวนคนในทีม
+export const calculateDailyTarget = (monthlyTarget: number, dateString: string, teamSize: number = 1): number => {
     const totalDaysInMonth = dayjs(dateString).daysInMonth();
-    return Math.round(monthlyTarget / totalDaysInMonth);
+    const dailyTarget = monthlyTarget / totalDaysInMonth;
+    return Math.ceil(dailyTarget / teamSize); // ใช้ Math.ceil เพื่อปัดเศษขึ้น
 };
 
+// ✅ เพิ่มฟังก์ชันสำหรับคำนวณเป้าหมายรายเดือนต่อคน
+export const calculateMonthlyTarget = (monthlyTarget: number, teamSize: number = 1): number => {
+    return Math.ceil(monthlyTarget / teamSize); // ใช้ Math.ceil เพื่อปัดเศษขึ้น
+};
 
 export const filterButtons = [
     { label: 'วันนี้', value: 'today' },
