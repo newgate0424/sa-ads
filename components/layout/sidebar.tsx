@@ -1,4 +1,4 @@
-// components/layout/sidebar.tsx
+// components/layout/sidebar.tsx (อัปเดต)
 'use client';
 
 import Link from 'next/link';
@@ -7,7 +7,7 @@ import { signOut } from 'next-auth/react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { LayoutDashboard, Settings, LogOut, PanelLeft, PanelRight, Activity, Home, Users, TestTube2, Star, BarChart3 } from 'lucide-react';
+import { LayoutDashboard, Settings, LogOut, PanelLeft, PanelRight, Activity, Home, Users, TestTube2, Star, BarChart3, TrendingUp } from 'lucide-react';
 import { useSettings } from '@/components/settings-provider';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
@@ -15,7 +15,7 @@ import { Separator } from '@/components/ui/separator';
 const navItems = [
     { href: '/overview', label: 'Overview', icon: Home },
     { href: '/adser', label: 'Adser', icon: Star },
-    { href: '/analytics', label: 'Analytics', icon: BarChart3 }, // ✅ เพิ่มหน้าใหม่
+    { href: '/analytics', label: 'Analytics', icon: BarChart3 },
     { href: '/monitor', label: 'Monitor', icon: Activity },
     { href: '/admin', label: 'User Management', icon: Users },
     { href: '/settings', label: 'Settings', icon: Settings },
@@ -37,7 +37,8 @@ export default function Sidebar() {
         localStorage.removeItem('dateRangeFilterMonitor');
         localStorage.removeItem('dateRangeFilterDashboard');
         localStorage.removeItem('dateRangeFilterAdserTable');
-        localStorage.removeItem('dateRangeFilterAnalytics'); // ✅ เพิ่มการล้างสำหรับหน้าใหม่
+        localStorage.removeItem('dateRangeFilterAnalytics');
+        localStorage.removeItem('dateRangeFilterAnalyticsV2Table'); // ✅ เพิ่มการล้างสำหรับหน้าใหม่
 
         // ออกจากระบบ
         signOut({ callbackUrl: '/' });
