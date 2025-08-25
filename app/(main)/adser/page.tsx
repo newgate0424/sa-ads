@@ -20,7 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ChevronsUpDown, Wifi, ChevronRight, ChevronLeft, TrendingUp, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Input } from '@/components/ui/input';
 import { Label as FormLabel } from '@/components/ui/label';
 
@@ -72,9 +72,22 @@ interface TransformedChartData {
 type ColorRule = {
     moreThan: { enabled: boolean; threshold: number; color: string; };
     lessThan: { enabled: boolean; threshold: number; color: string; };
+    applyToCell: boolean; // ใหม่: เปลี่ยนสีทั้งเซลล์หรือเฉพาะข้อความ
 };
 
-type ColorSettings = Record<string, ColorRule>;
+type TeamColorSettings = Record<string, Record<string, ColorRule>>; // team -> field -> rule
+
+interface TeamColorSettingDB {
+    team_name: string;
+    field_name: string;
+    more_than_enabled: boolean;
+    more_than_threshold: number;
+    more_than_color: string;
+    less_than_enabled: boolean;
+    less_than_threshold: number;
+    less_than_color: string;
+    apply_to_cell: boolean; // ใหม่
+}
 
 // --- Constants & Configs ---
 const teamColors: { [key: string]: string } = { 
@@ -110,18 +123,7 @@ const breakdownFields = {
     foreigner_inquiries: 'ต่างชาติ'
 };
 
-const initialColorSettings: ColorSettings = {
-    wasted_inquiries: { 
-        moreThan: { enabled: true, threshold: 20, color: '#ef4444' }, 
-        lessThan: { enabled: true, threshold: 10, color: '#22c55e' } 
-    },
-    ...Object.fromEntries(Object.keys(breakdownFields).slice(1).map(key => [
-        key, { 
-            moreThan: { enabled: false, threshold: 0, color: '#ef4444' }, 
-            lessThan: { enabled: false, threshold: 0, color: '#22c55e' } 
-        }
-    ]))
-};
+const initialColorSettings: TeamColorSettings = {};
 
 // --- Helper Functions ---
 const fetcher = (url: string) => fetch(url, { cache: 'no-store' }).then(res => res.ok ? res.json() : Promise.reject(new Error('Failed to fetch')));
@@ -188,22 +190,44 @@ const FinancialMetric = memo(({ value, prefix = '', suffix = '' }: { value: numb
 
 const BreakdownCell = memo(({ value, total, rule }: { value: number, total: number, rule?: ColorRule }) => { 
     const percentage = total > 0 ? (value / total) * 100 : 0; 
-    let colorStyle = {}; 
+    let textColorStyle = {};
+    let cellStyle = {};
     
     if (rule) { 
+        let matchedColor = '';
+        let shouldApply = false;
+        
         if (rule.moreThan.enabled && percentage > rule.moreThan.threshold) { 
-            colorStyle = { color: rule.moreThan.color }; 
+            matchedColor = rule.moreThan.color;
+            shouldApply = true;
         } else if (rule.lessThan.enabled && percentage < rule.lessThan.threshold) { 
-            colorStyle = { color: rule.lessThan.color }; 
-        } 
+            matchedColor = rule.lessThan.color;
+            shouldApply = true;
+        }
+        
+        if (shouldApply && matchedColor) {
+            if (rule.applyToCell) {
+                // สีพื้นหลังเซลล์
+                cellStyle = { 
+                    backgroundColor: matchedColor + '20', // เพิ่มความโปร่งแสง
+                    borderColor: matchedColor,
+                    borderWidth: '1px',
+                    borderStyle: 'solid'
+                };
+                textColorStyle = { color: matchedColor };
+            } else {
+                // เฉพาะข้อความ
+                textColorStyle = { color: matchedColor };
+            }
+        }
     } 
     
     return ( 
-        <div className="text-center w-[80px] flex-shrink-0"> 
-            <div className="text-sm font-medium leading-tight" style={colorStyle}>
+        <div className="text-center w-[80px] flex-shrink-0" style={cellStyle}> 
+            <div className="text-sm font-medium leading-tight" style={textColorStyle}>
                 {formatNumber(value)}
             </div> 
-            <div className="text-xs text-muted-foreground leading-tight">
+            <div className="text-xs text-muted-foreground leading-tight" style={textColorStyle}>
                 ({percentage.toFixed(1)}%)
             </div> 
         </div> 
@@ -330,75 +354,209 @@ const GroupedChart = memo(({
     ); 
 });
 
-const ColorSettingsSheet = memo(({ settings, setSettings }: { settings: ColorSettings, setSettings: (settings: ColorSettings) => void }) => { 
-    const handleThresholdChange = (field: string, type: 'moreThan' | 'lessThan', value: string) => { 
-        const newSettings = { ...settings }; 
-        newSettings[field][type].threshold = Number(value); 
-        newSettings[field][type].enabled = true; 
-        setSettings(newSettings); 
+const ColorSettingsPopover = memo(({ 
+    teamNames, 
+    settings, 
+    setSettings 
+}: { 
+    teamNames: string[];
+    settings: TeamColorSettings;
+    setSettings: (settings: TeamColorSettings) => void;
+}) => { 
+    const [selectedTeam, setSelectedTeam] = useState(teamNames[0] || '');
+    const [loading, setLoading] = useState(false);
+    const [open, setOpen] = useState(false);
+
+    const getCurrentTeamSettings = () => settings[selectedTeam] || {};
+
+    const handleThresholdChange = async (field: string, type: 'moreThan' | 'lessThan', value: string) => { 
+        const newSettings = { ...settings };
+        if (!newSettings[selectedTeam]) newSettings[selectedTeam] = {};
+        if (!newSettings[selectedTeam][field]) {
+            newSettings[selectedTeam][field] = {
+                moreThan: { enabled: false, threshold: 0, color: '#ef4444' },
+                lessThan: { enabled: false, threshold: 0, color: '#22c55e' },
+                applyToCell: false
+            };
+        }
+        
+        newSettings[selectedTeam][field][type].threshold = Number(value); 
+        newSettings[selectedTeam][field][type].enabled = true; 
+        
+        setSettings(newSettings);
+        await saveSetting(selectedTeam, field, newSettings[selectedTeam][field]);
     }; 
     
-    const handleColorChange = (field: string, type: 'moreThan' | 'lessThan', value: string) => { 
-        const newSettings = { ...settings }; 
-        newSettings[field][type].color = value; 
-        newSettings[field][type].enabled = true; 
-        setSettings(newSettings); 
+    const handleColorChange = async (field: string, type: 'moreThan' | 'lessThan', value: string) => { 
+        const newSettings = { ...settings };
+        if (!newSettings[selectedTeam]) newSettings[selectedTeam] = {};
+        if (!newSettings[selectedTeam][field]) {
+            newSettings[selectedTeam][field] = {
+                moreThan: { enabled: false, threshold: 0, color: '#ef4444' },
+                lessThan: { enabled: false, threshold: 0, color: '#22c55e' },
+                applyToCell: false
+            };
+        }
+        
+        newSettings[selectedTeam][field][type].color = value; 
+        newSettings[selectedTeam][field][type].enabled = true; 
+        
+        setSettings(newSettings);
+        await saveSetting(selectedTeam, field, newSettings[selectedTeam][field]);
     }; 
+
+    const handleApplyToCellChange = async (field: string, checked: boolean) => {
+        const newSettings = { ...settings };
+        if (!newSettings[selectedTeam]) newSettings[selectedTeam] = {};
+        if (!newSettings[selectedTeam][field]) {
+            newSettings[selectedTeam][field] = {
+                moreThan: { enabled: false, threshold: 0, color: '#ef4444' },
+                lessThan: { enabled: false, threshold: 0, color: '#22c55e' },
+                applyToCell: false
+            };
+        }
+        
+        newSettings[selectedTeam][field].applyToCell = checked;
+        
+        setSettings(newSettings);
+        await saveSetting(selectedTeam, field, newSettings[selectedTeam][field]);
+    };
+
+    const saveSetting = async (teamName: string, fieldName: string, rule: ColorRule) => {
+        setLoading(true);
+        try {
+            await fetch('/api/team-color-settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    teamName,
+                    fieldName,
+                    moreThan: rule.moreThan,
+                    lessThan: rule.lessThan,
+                    applyToCell: rule.applyToCell
+                })
+            });
+        } catch (error) {
+            console.error('Error saving color settings:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
     
     return ( 
-        <Sheet> 
-            <SheetTrigger className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-8 w-8"> 
-                <Settings className="h-4 w-4" /> 
-            </SheetTrigger> 
-            <SheetContent className="w-[400px] sm:w-[540px] overflow-y-auto"> 
-                <SheetHeader> 
-                    <SheetTitle>ตั้งค่าสีตามเงื่อนไข</SheetTitle> 
-                </SheetHeader> 
-                <div className="space-y-6 py-4"> 
-                    {Object.entries(breakdownFields).map(([key, name]) => ( 
-                        <div key={key} className="p-4 border rounded-lg"> 
-                            <h4 className="text-lg font-medium mb-4">{name}</h4> 
-                            <div className="grid grid-cols-2 gap-4"> 
-                                <div className="space-y-2"> 
-                                    <FormLabel>ถ้ามากกว่า (%) เป็นสี</FormLabel> 
-                                    <div className="flex gap-2"> 
-                                        <Input 
-                                            type="number" 
-                                            value={settings[key]?.moreThan.threshold || 0} 
-                                            onChange={e => handleThresholdChange(key, 'moreThan', e.target.value)} 
-                                            className="w-20" 
-                                        /> 
-                                        <Input 
-                                            type="color" 
-                                            value={settings[key]?.moreThan.color || '#ef4444'} 
-                                            onChange={e => handleColorChange(key, 'moreThan', e.target.value)} 
-                                            className="w-12 h-10 p-1" 
-                                        /> 
+        <Popover open={open} onOpenChange={setOpen}> 
+            <PopoverTrigger asChild>
+                <Button 
+                    variant="ghost" 
+                    size="icon"
+                    className="h-8 w-8 hover:bg-accent hover:text-accent-foreground"
+                >
+                    <Settings className="h-4 w-4" /> 
+                </Button>
+            </PopoverTrigger> 
+            <PopoverContent 
+                className="w-[480px] max-h-[600px] overflow-y-auto p-4" 
+                align="start"
+                side="bottom"
+            > 
+                <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                        <h4 className="font-medium">ตั้งค่าสีตามเงื่อนไข</h4>
+                        {loading && (
+                            <div className="text-sm text-muted-foreground">
+                                กำลังบันทึก...
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Team Selector */}
+                    <div className="space-y-2">
+                        <FormLabel>เลือกทีม</FormLabel>
+                        <Select value={selectedTeam} onValueChange={setSelectedTeam}>
+                            <SelectTrigger className="w-full">
+                                <SelectValue placeholder="เลือกทีม" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {teamNames.map(team => (
+                                    <SelectItem key={team} value={team}>{team}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+
+                    {/* Field Settings */}
+                    <div className="space-y-4 max-h-[400px] overflow-y-auto">
+                        {Object.entries(breakdownFields).map(([key, name]) => ( 
+                            <div key={key} className="p-3 border rounded-lg space-y-3"> 
+                                <div className="flex items-center justify-between">
+                                    <h5 className="font-medium text-sm">{name}</h5>
+                                    <div className="flex items-center space-x-2">
+                                        <input
+                                            type="checkbox"
+                                            id={`${key}-cell`}
+                                            checked={getCurrentTeamSettings()[key]?.applyToCell || false}
+                                            onChange={(e) => handleApplyToCellChange(key, e.target.checked)}
+                                            className="rounded"
+                                            disabled={loading}
+                                        />
+                                        <FormLabel htmlFor={`${key}-cell`} className="text-xs">
+                                            สีทั้งเซลล์
+                                        </FormLabel>
+                                    </div>
+                                </div>
+                                
+                                <div className="grid grid-cols-2 gap-3 text-xs"> 
+                                    <div className="space-y-2"> 
+                                        <FormLabel>มากกว่า (%)</FormLabel> 
+                                        <div className="flex gap-2"> 
+                                            <Input 
+                                                type="number" 
+                                                value={getCurrentTeamSettings()[key]?.moreThan.threshold || 0} 
+                                                onChange={e => handleThresholdChange(key, 'moreThan', e.target.value)} 
+                                                className="w-16 h-8 text-xs" 
+                                                disabled={loading}
+                                                min="0"
+                                                max="100"
+                                                step="0.1"
+                                            /> 
+                                            <Input 
+                                                type="color" 
+                                                value={getCurrentTeamSettings()[key]?.moreThan.color || '#ef4444'} 
+                                                onChange={e => handleColorChange(key, 'moreThan', e.target.value)} 
+                                                className="w-10 h-8 p-1 rounded cursor-pointer" 
+                                                disabled={loading}
+                                            /> 
+                                        </div> 
                                     </div> 
-                                </div> 
-                                <div className="space-y-2"> 
-                                    <FormLabel>ถ้าน้อยกว่า (%) เป็นสี</FormLabel> 
-                                    <div className="flex gap-2"> 
-                                        <Input 
-                                            type="number" 
-                                            value={settings[key]?.lessThan.threshold || 0} 
-                                            onChange={e => handleThresholdChange(key, 'lessThan', e.target.value)} 
-                                            className="w-20" 
-                                        /> 
-                                        <Input 
-                                            type="color" 
-                                            value={settings[key]?.lessThan.color || '#22c55e'} 
-                                            onChange={e => handleColorChange(key, 'lessThan', e.target.value)} 
-                                            className="w-12 h-10 p-1" 
-                                        /> 
+                                    <div className="space-y-2"> 
+                                        <FormLabel>น้อยกว่า (%)</FormLabel> 
+                                        <div className="flex gap-2"> 
+                                            <Input 
+                                                type="number" 
+                                                value={getCurrentTeamSettings()[key]?.lessThan.threshold || 0} 
+                                                onChange={e => handleThresholdChange(key, 'lessThan', e.target.value)} 
+                                                className="w-16 h-8 text-xs" 
+                                                disabled={loading}
+                                                min="0"
+                                                max="100"
+                                                step="0.1"
+                                            /> 
+                                            <Input 
+                                                type="color" 
+                                                value={getCurrentTeamSettings()[key]?.lessThan.color || '#22c55e'} 
+                                                onChange={e => handleColorChange(key, 'lessThan', e.target.value)} 
+                                                className="w-10 h-8 p-1 rounded cursor-pointer" 
+                                                disabled={loading}
+                                            /> 
+                                        </div> 
                                     </div> 
                                 </div> 
                             </div> 
-                        </div> 
-                    ))} 
-                </div> 
-            </SheetContent> 
-        </Sheet> 
+                        ))} 
+                    </div>
+                </div>
+            </PopoverContent> 
+        </Popover> 
     ); 
 });
 
@@ -407,7 +565,7 @@ export default function AdserPage() {
     const [isClient, setIsClient] = useState(false); 
     const [tableDateRange, setTableDateRange] = useState<DateRange | undefined>(undefined); 
     const [showBreakdown, setShowBreakdown] = useState(false); 
-    const [colorSettings, setColorSettings] = useState<ColorSettings>(initialColorSettings);
+    const [colorSettings, setColorSettings] = useState<TeamColorSettings>(initialColorSettings);
     const [chartData, setChartData] = useState<{ cpm: TransformedChartData[], costPerDeposit: TransformedChartData[], deposits: TransformedChartData[], cover: TransformedChartData[] }>({ cpm: [], costPerDeposit: [], deposits: [], cover: [] }); 
     const [graphView, setGraphView] = useState<'daily' | 'monthly'>('daily'); 
     const [graphYear, setGraphYear] = useState(dayjs().year()); 
@@ -416,19 +574,45 @@ export default function AdserPage() {
     const [connectionError, setConnectionError] = useState<string | null>(null); 
     const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
+    // ✅ โหลดการตั้งค่าสีจากฐานข้อมูล
+    const loadColorSettings = async () => {
+        try {
+            const response = await fetch('/api/team-color-settings');
+            if (response.ok) {
+                const dbSettings: TeamColorSettingDB[] = await response.json();
+                const newSettings: TeamColorSettings = {};
+                
+                dbSettings.forEach(setting => {
+                    if (!newSettings[setting.team_name]) {
+                        newSettings[setting.team_name] = {};
+                    }
+                    newSettings[setting.team_name][setting.field_name] = {
+                        moreThan: {
+                            enabled: setting.more_than_enabled,
+                            threshold: setting.more_than_threshold,
+                            color: setting.more_than_color
+                        },
+                        lessThan: {
+                            enabled: setting.less_than_enabled,
+                            threshold: setting.less_than_threshold,
+                            color: setting.less_than_color
+                        }
+                    };
+                });
+                
+                setColorSettings(newSettings);
+            }
+        } catch (error) {
+            console.error('Error loading color settings:', error);
+        }
+    };
+
     // ✅ เพิ่มการจำค่าต่างๆ ใน localStorage
     useEffect(() => { 
         setIsClient(true); 
         
-        // จำ color settings
-        try { 
-            const savedSettings = localStorage.getItem('adserColorSettings'); 
-            if (savedSettings) { 
-                setColorSettings(JSON.parse(savedSettings)); 
-            } 
-        } catch (error) { 
-            console.error("Failed to parse color settings from localStorage", error); 
-        }
+        // โหลดการตั้งค่าสีจากฐานข้อมูล
+        loadColorSettings();
 
         // จำ table date range
         try {
@@ -543,11 +727,9 @@ export default function AdserPage() {
         return newSet; 
     });
 
-    const handleSetColorSettings = (newSettings: ColorSettings) => { 
+    const handleSetColorSettings = (newSettings: TeamColorSettings) => { 
         setColorSettings(newSettings); 
-        if (isClient) { 
-            localStorage.setItem('adserColorSettings', JSON.stringify(newSettings)); 
-        } 
+        // ไม่ต้องบันทึกลง localStorage เพราะบันทึกลงฐานข้อมูลแล้ว
     };
 
     const { data: exchangeRateData, isLoading: isRateLoading } = useSWR('/api/exchange-rate', fetcher, { 
@@ -784,9 +966,10 @@ export default function AdserPage() {
                                             isFallback={isRateFallback} 
                                         />
                                     )}
-                                    <ColorSettingsSheet 
+                                    <ColorSettingsPopover 
+                                        teamNames={teamNames}
                                         settings={colorSettings} 
-                                        setSettings={handleSetColorSettings} 
+                                        setSettings={handleSetColorSettings}
                                     />
                                     <Button 
                                         variant="outline" 
