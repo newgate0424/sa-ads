@@ -112,61 +112,66 @@ export default function AdserPage() {
                                     </Button>
                                 </div>
                             </CardHeader>
-                            <CardContent className="px-0">
-                                <Collapsible open={expandedGroups.has(groupName)} onOpenChange={() => toggleGroup(groupName)}>
-                                    <div className="overflow-x-auto">
-                                        <Table className="text-sm">
-                                            <TableHeader>
-                                                <TableRow>
-                                                    <TableHead className="text-center w-[150px]">ทีม</TableHead><TableHead className="text-center">ยอดทัก/แผน</TableHead><TableHead className="text-center">ใช้จ่าย/แผน</TableHead>
-                                                    <TableHead className="text-center">ยอดทักสุทธิ</TableHead><TableHead className="text-center">ยอดเสีย</TableHead>
-                                                    <TableHead className="text-center">CPM</TableHead><TableHead className="text-center">ยอดเติม</TableHead><TableHead className="text-center">ทุน/เติม</TableHead>
-                                                    <TableHead className="text-right">ยอดเล่นใหม่</TableHead><TableHead className="text-right pr-4">1$/Cover</TableHead>
-                                                    {showBreakdown && <><TableHead className="text-center w-[80px]">เงียบ</TableHead><TableHead className="text-center w-[80px]">ซ้ำ</TableHead><TableHead className="text-center w-[80px]">มียูส</TableHead><TableHead className="text-center w-[80px]">ก่อกวน</TableHead><TableHead className="text-center w-[80px]">บล็อก</TableHead><TableHead className="text-center w-[80px]">&lt;18</TableHead><TableHead className="text-center w-[80px]">&gt;50</TableHead><TableHead className="text-center w-[80px] pr-4">ต.ชาติ</TableHead></>}
+                            <CardContent className="px-0 pb-0">
+                                <div className="overflow-x-auto">
+                                    <Table className="text-sm">
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead className="text-center w-[150px]">ทีม</TableHead><TableHead className="text-center">ยอดทัก/แผน</TableHead><TableHead className="text-center">ใช้จ่าย/แผน</TableHead>
+                                                <TableHead className="text-center">ยอดทักสุทธิ</TableHead><TableHead className="text-center">ยอดเสีย</TableHead>
+                                                <TableHead className="text-center">CPM</TableHead><TableHead className="text-center">ยอดเติม</TableHead><TableHead className="text-center">ทุน/เติม</TableHead>
+                                                <TableHead className="text-right">ยอดเล่นใหม่</TableHead><TableHead className="text-right pr-4">1$/Cover</TableHead>
+                                                {showBreakdown && <><TableHead className="text-center w-[80px]">เงียบ</TableHead><TableHead className="text-center w-[80px]">ซ้ำ</TableHead><TableHead className="text-center w-[80px]">มียูส</TableHead><TableHead className="text-center w-[80px]">ก่อกวน</TableHead><TableHead className="text-center w-[80px]">บล็อก</TableHead><TableHead className="text-center w-[80px]">&lt;18</TableHead><TableHead className="text-center w-[80px]">&gt;50</TableHead><TableHead className="text-center w-[80px] pr-4">ต.ชาติ</TableHead></>}
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {teamsInGroup.sort((a, b) => teamNames.indexOf(a.team_name) - teamNames.indexOf(b.team_name)).map(team => (
+                                                <TableRow key={team.team_name}>
+                                                    <TableCell className="font-medium pl-4">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className={cn('w-2 h-2 rounded-full flex-shrink-0', team.actual_spend <= team.planned_daily_spend ? 'bg-green-500' : 'bg-red-500')} />
+                                                            {team.team_name}
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell className="text-center"><div className="flex justify-center"><ProgressCell value={team.total_inquiries} total={team.planned_inquiries} /></div></TableCell>
+                                                    <TableCell className="text-center"><div className="flex justify-center"><ProgressCell value={team.actual_spend} total={team.planned_daily_spend} isCurrency /></div></TableCell>
+                                                    <TableCell className="text-center"><BreakdownCell value={team.net_inquiries} total={team.total_inquiries} /></TableCell>
+                                                    <TableCell className="text-center"><BreakdownCell value={team.wasted_inquiries} total={team.total_inquiries} rule={colorSettings.wasted_inquiries} /></TableCell>
+                                                    <TableCell className="text-center"><FinancialMetric value={team.cpm_cost_per_inquiry} prefix="$" /></TableCell>
+                                                    <TableCell className="text-center text-sm font-medium">{formatNumber(team.deposits_count)}</TableCell>
+                                                    <TableCell className="text-center"><FinancialMetric value={team.cost_per_deposit} prefix="$" /></TableCell>
+                                                    <TableCell className="text-right"><FinancialMetric value={team.new_player_value_thb} prefix="฿" /></TableCell>
+                                                    <TableCell className="text-right pr-4"><FinancialMetric value={team.one_dollar_per_cover} prefix="$" /></TableCell>
+                                                    {showBreakdown && <>
+                                                        <TableCell className="text-center"><BreakdownCell value={team.silent_inquiries} total={team.total_inquiries} rule={colorSettings.silent_inquiries} /></TableCell>
+                                                        <TableCell className="text-center"><BreakdownCell value={team.repeat_inquiries} total={team.total_inquiries} rule={colorSettings.repeat_inquiries} /></TableCell>
+                                                        <TableCell className="text-center"><BreakdownCell value={team.existing_user_inquiries} total={team.total_inquiries} rule={colorSettings.existing_user_inquiries} /></TableCell>
+                                                        <TableCell className="text-center"><BreakdownCell value={team.spam_inquiries} total={team.total_inquiries} rule={colorSettings.spam_inquiries} /></TableCell>
+                                                        <TableCell className="text-center"><BreakdownCell value={team.blocked_inquiries} total={team.total_inquiries} rule={colorSettings.blocked_inquiries} /></TableCell>
+                                                        <TableCell className="text-center"><BreakdownCell value={team.under_18_inquiries} total={team.total_inquiries} rule={colorSettings.under_18_inquiries} /></TableCell>
+                                                        <TableCell className="text-center"><BreakdownCell value={team.over_50_inquiries} total={team.total_inquiries} rule={colorSettings.over_50_inquiries} /></TableCell>
+                                                        <TableCell className="text-center pr-4"><BreakdownCell value={team.foreigner_inquiries} total={team.total_inquiries} rule={colorSettings.foreigner_inquiries} /></TableCell>
+                                                    </>}
                                                 </TableRow>
-                                            </TableHeader>
-                                            <TableBody>
-                                                {teamsInGroup.sort((a, b) => teamNames.indexOf(a.team_name) - teamNames.indexOf(b.team_name)).map(team => (
-                                                    <TableRow key={team.team_name}>
-                                                        <TableCell className="font-medium pl-4">
-                                                            <div className="flex items-center gap-2">
-                                                                <span className={cn('w-2 h-2 rounded-full flex-shrink-0', team.actual_spend <= team.planned_daily_spend ? 'bg-green-500' : 'bg-red-500')} />
-                                                                {team.team_name}
-                                                            </div>
-                                                        </TableCell>
-                                                        <TableCell className="text-center"><div className="flex justify-center"><ProgressCell value={team.total_inquiries} total={team.planned_inquiries} /></div></TableCell>
-                                                        <TableCell className="text-center"><div className="flex justify-center"><ProgressCell value={team.actual_spend} total={team.planned_daily_spend} isCurrency /></div></TableCell>
-                                                        <TableCell className="text-center"><BreakdownCell value={team.net_inquiries} total={team.total_inquiries} /></TableCell>
-                                                        <TableCell className="text-center"><BreakdownCell value={team.wasted_inquiries} total={team.total_inquiries} rule={colorSettings.wasted_inquiries} /></TableCell>
-                                                        <TableCell className="text-center"><FinancialMetric value={team.cpm_cost_per_inquiry} prefix="$" /></TableCell>
-                                                        <TableCell className="text-center text-sm font-medium">{formatNumber(team.deposits_count)}</TableCell>
-                                                        <TableCell className="text-center"><FinancialMetric value={team.cost_per_deposit} prefix="$" /></TableCell>
-                                                        <TableCell className="text-right"><FinancialMetric value={team.new_player_value_thb} prefix="฿" /></TableCell>
-                                                        <TableCell className="text-right pr-4"><FinancialMetric value={team.one_dollar_per_cover} prefix="$" /></TableCell>
-                                                        {showBreakdown && <>
-                                                            <TableCell className="text-center"><BreakdownCell value={team.silent_inquiries} total={team.total_inquiries} rule={colorSettings.silent_inquiries} /></TableCell>
-                                                            <TableCell className="text-center"><BreakdownCell value={team.repeat_inquiries} total={team.total_inquiries} rule={colorSettings.repeat_inquiries} /></TableCell>
-                                                            <TableCell className="text-center"><BreakdownCell value={team.existing_user_inquiries} total={team.total_inquiries} rule={colorSettings.existing_user_inquiries} /></TableCell>
-                                                            <TableCell className="text-center"><BreakdownCell value={team.spam_inquiries} total={team.total_inquiries} rule={colorSettings.spam_inquiries} /></TableCell>
-                                                            <TableCell className="text-center"><BreakdownCell value={team.blocked_inquiries} total={team.total_inquiries} rule={colorSettings.blocked_inquiries} /></TableCell>
-                                                            <TableCell className="text-center"><BreakdownCell value={team.under_18_inquiries} total={team.total_inquiries} rule={colorSettings.under_18_inquiries} /></TableCell>
-                                                            <TableCell className="text-center"><BreakdownCell value={team.over_50_inquiries} total={team.total_inquiries} rule={colorSettings.over_50_inquiries} /></TableCell>
-                                                            <TableCell className="text-center pr-4"><BreakdownCell value={team.foreigner_inquiries} total={team.total_inquiries} rule={colorSettings.foreigner_inquiries} /></TableCell>
-                                                        </>}
-                                                    </TableRow>
-                                                ))}
-                                            </TableBody>
-                                        </Table>
-                                    </div>
-                                    <div className="flex justify-center mt-2 px-4">
-                                        <CollapsibleTrigger className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-9 px-4 py-2 text-xs text-muted-foreground w-full">
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                </div>
+                                
+                                <Collapsible open={expandedGroups.has(groupName)} onOpenChange={() => toggleGroup(groupName)}>
+                                    <CollapsibleContent className="px-4 pb-4">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4"><GroupedChart title="ต้นทุนทัก (CPM)" data={chartData.cpm} yAxisLabel="$" loading={loadingGraph} teamsToShow={teamNames} chartType="cpm" yAxisDomainMax={groupYAxisMax[groupName]?.cpm} graphView={graphView} /><GroupedChart title="ต้นทุนต่อเติม" data={chartData.costPerDeposit} yAxisLabel="$" loading={loadingGraph} teamsToShow={teamNames} chartType="costPerDeposit" yAxisDomainMax={groupYAxisMax[groupName]?.costPerDeposit} graphView={graphView} /><GroupedChart title="เป้ายอดเติม" data={chartData.deposits} yAxisLabel="" loading={loadingGraph} teamsToShow={teamNames} chartType="deposits" dateForTarget={graphDateRange?.from} graphView={graphView} /><GroupedChart title="1$ / Cover" data={chartData.cover} yAxisLabel="$" loading={loadingGraph} teamsToShow={teamNames} chartType="cover" groupName={groupName} yAxisDomainMax={groupYAxisMax[groupName]?.cover} graphView={graphView} /></div>
+                                    </CollapsibleContent>
+                                    
+                                    {/* ปุ่มแสดง/ซ่อนกราฟ - อยู่ในส่วนล่างของ Collapsible */}
+                                    <div className="flex justify-center border-t bg-muted/30 p-3">
+                                        <CollapsibleTrigger 
+                                            className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-9 px-4 py-2 text-xs text-muted-foreground w-full max-w-xs"
+                                        >
                                             <TrendingUp className="h-4 w-4 mr-1" />
                                             {expandedGroups.has(groupName) ? 'ซ่อนกราฟ' : 'แสดงกราฟ'}
                                         </CollapsibleTrigger>
                                     </div>
-                                    <CollapsibleContent className="px-4 pb-4">
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4"><GroupedChart title="ต้นทุนทัก (CPM)" data={chartData.cpm} yAxisLabel="$" loading={loadingGraph} teamsToShow={teamNames} chartType="cpm" yAxisDomainMax={groupYAxisMax[groupName]?.cpm} graphView={graphView} /><GroupedChart title="ต้นทุนต่อเติม" data={chartData.costPerDeposit} yAxisLabel="$" loading={loadingGraph} teamsToShow={teamNames} chartType="costPerDeposit" yAxisDomainMax={groupYAxisMax[groupName]?.costPerDeposit} graphView={graphView} /><GroupedChart title="เป้ายอดเติม" data={chartData.deposits} yAxisLabel="" loading={loadingGraph} teamsToShow={teamNames} chartType="deposits" dateForTarget={graphDateRange?.from} graphView={graphView} /><GroupedChart title="1$ / Cover" data={chartData.cover} yAxisLabel="$" loading={loadingGraph} teamsToShow={teamNames} chartType="cover" groupName={groupName} yAxisDomainMax={groupYAxisMax[groupName]?.cover} graphView={graphView} /></div>
-                                    </CollapsibleContent>
                                 </Collapsible>
                             </CardContent>
                         </Card>
