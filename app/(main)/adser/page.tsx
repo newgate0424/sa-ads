@@ -426,11 +426,11 @@ export default function AdserPage() {
         }
 
         if (winningBgColor) {
-            style.backgroundColor = `${winningBgColor}20`;
+            style.backgroundColor = `${winningBgColor}20`; // Add transparency
             style.borderRadius = '6px';
             style.padding = '2px 8px';
             style.display = 'inline-block';
-            if (!winningTextColor) {
+            if (!winningTextColor) { // Only adjust text color if not explicitly set
                 style.color = getTextColorForBackground(winningBgColor);
             }
         }
@@ -574,14 +574,14 @@ export default function AdserPage() {
                                                     <TableCell className="text-right"><span style={getCellStyle(team.team_name, 'new_player_value_thb', team.new_player_value_thb)}><FinancialMetric value={team.new_player_value_thb} prefix="฿" /></span></TableCell>
                                                     <TableCell className="text-right pr-4"><span style={getCellStyle(team.team_name, 'one_dollar_per_cover', team.one_dollar_per_cover)}><FinancialMetric value={team.one_dollar_per_cover} prefix="$" /></span></TableCell>
                                                     {showBreakdown && <>
-                                                        {Object.keys(allConfigurableFields)
-                                                            .filter(key => allConfigurableFields[key as keyof typeof allConfigurableFields].unit === '%' && !['wasted_inquiries', 'net_inquiries'].includes(key))
+                                                        {(Object.keys(allConfigurableFields) as Array<keyof typeof allConfigurableFields>)
+                                                            .filter(key => allConfigurableFields[key].unit === '%' && !['wasted_inquiries', 'net_inquiries'].includes(key))
                                                             .map(key => {
                                                                 const typedKey = key as keyof TeamMetric;
                                                                 const value = team[typedKey] as number | undefined;
                                                                 return (
                                                                     <TableCell key={key} className="text-center">
-                                                                        <span style={getCellStyle(team.team_name, typedKey, value ?? 0, team.total_inquiries)}>
+                                                                        <span style={getCellStyle(team.team_name, key, value ?? 0, team.total_inquiries)}>
                                                                             <BreakdownCell value={value ?? 0} total={team.total_inquiries} />
                                                                         </span>
                                                                     </TableCell>
