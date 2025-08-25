@@ -187,7 +187,7 @@ const FinancialMetric = memo(({ value, prefix = '', suffix = '' }: { value: numb
 const BreakdownCell = memo(({ value, total }: { value: number, total: number }) => {
     const percentage = total > 0 ? (value / total) * 100 : 0;
     return (
-        <div className="text-center w-[80px] flex-shrink-0 mx-auto">
+        <div className="text-center w-[70px] flex-shrink-0 mx-auto">
             <div className="text-sm font-medium leading-tight">{formatNumber(value)}</div>
             <div className="text-xs text-muted-foreground leading-tight">({percentage.toFixed(1)}%)</div>
         </div>
@@ -549,14 +549,14 @@ export default function AdserPage() {
                                                 <TableHead className="text-right">ยอดเล่นใหม่</TableHead>
                                                 <TableHead className="text-right pr-4">1$/Cover</TableHead>
                                                 {showBreakdown && <>
-                                                    <TableHead className="text-center w-[80px]">เงียบ</TableHead>
-                                                    <TableHead className="text-center w-[80px]">ซ้ำ</TableHead>
-                                                    <TableHead className="text-center w-[80px]">มียูส</TableHead>
-                                                    <TableHead className="text-center w-[80px]">ก่อกวน</TableHead>
-                                                    <TableHead className="text-center w-[80px]">บล็อก</TableHead>
-                                                    <TableHead className="text-center w-[80px]">&lt;18</TableHead>
-                                                    <TableHead className="text-center w-[80px]">&gt;50</TableHead>
-                                                    <TableHead className="text-center w-[80px] pr-4">ต.ชาติ</TableHead>
+                                                    <TableHead className="text-center w-[70px]">เงียบ</TableHead>
+                                                    <TableHead className="text-center w-[70px]">ซ้ำ</TableHead>
+                                                    <TableHead className="text-center w-[70px]">มียูส</TableHead>
+                                                    <TableHead className="text-center w-[70px]">ก่อกวน</TableHead>
+                                                    <TableHead className="text-center w-[70px]">บล็อก</TableHead>
+                                                    <TableHead className="text-center w-[70px]">เด็ก</TableHead>
+                                                    <TableHead className="text-center w-[70px]">อายุเกิน 50</TableHead>
+                                                    <TableHead className="text-center w-[70px] pr-4">ต่างชาติ</TableHead>
                                                 </>}
                                             </TableRow>
                                         </TableHeader>
