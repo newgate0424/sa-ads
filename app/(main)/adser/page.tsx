@@ -206,7 +206,7 @@ const GroupedChart = memo(({ title, data, yAxisLabel, loading, teamsToShow, char
     const targets = useMemo(() => {
         const targetMap = new Map<string, number>();
         teamsToShow.forEach(teamName => {
-            if (chartType === 'cpm') targetMap.set(teamName, cpmThresholds[teamName] || 0);
+            if (chartType === 'cpm') targetMap.set(teamName, cmpThresholds[teamName] || 0);
             else if (chartType === 'costPerDeposit') targetMap.set(teamName, costPerDepositThresholds[teamName] || 0);
             else if (chartType === 'deposits' && dateForTarget) {
                 const monthlyTarget = depositsMonthlyTargets[teamName] || 0;
@@ -248,18 +248,31 @@ const GroupedChart = memo(({ title, data, yAxisLabel, loading, teamsToShow, char
 
 const ColorSettingsPopover = memo(({ groupName, teamNames, settings, onSave }: { groupName: string; teamNames: string[]; settings: AllTeamsColorSettings; onSave: (newSettings: AllTeamsColorSettings) => void; }) => {
     const [open, setOpen] = useState(false);
-    const [localSettings, setLocalSettings] = useState<AllTeamsColorSettings>(settings);
+    const [localSettings, setLocalSettings] = useState<AllTeamsColorSettings>({});
     const [loading, setLoading] = useState(false);
     const representativeTeam = teamNames[0] || '';
 
-    useEffect(() => { setLocalSettings(settings); }, [settings, open]);
+    useEffect(() => { 
+        if (open) {
+            // Initialize with current settings or empty structure
+            const initialSettings = { ...settings };
+            if (!initialSettings[representativeTeam]) {
+                initialSettings[representativeTeam] = {};
+            }
+            setLocalSettings(initialSettings);
+        }
+    }, [settings, open, representativeTeam]);
 
-    const getFieldSettings = (fieldName: string): FieldColorSettings => localSettings?.[representativeTeam]?.[fieldName] || { textColorRules: [], backgroundColorRules: [] };
+    const getFieldSettings = (fieldName: string): FieldColorSettings => {
+        return localSettings?.[representativeTeam]?.[fieldName] || { textColorRules: [], backgroundColorRules: [] };
+    };
 
     const updateFieldSettings = (fieldName: string, newFieldSettings: FieldColorSettings) => {
         setLocalSettings(prev => {
             const newSettings = JSON.parse(JSON.stringify(prev));
-            if (!newSettings[representativeTeam]) newSettings[representativeTeam] = {};
+            if (!newSettings[representativeTeam]) {
+                newSettings[representativeTeam] = {};
+            }
             newSettings[representativeTeam][fieldName] = newFieldSettings;
             return newSettings;
         });
@@ -267,13 +280,27 @@ const ColorSettingsPopover = memo(({ groupName, teamNames, settings, onSave }: {
     
     const handleRuleChange = (fieldName: string, ruleType: 'textColorRules' | 'backgroundColorRules', ruleId: string, property: keyof Omit<ThresholdRule, 'id'>, value: any) => {
         const fieldSettings = getFieldSettings(fieldName);
-        const updatedRules = fieldSettings[ruleType].map(r => r.id === ruleId ? { ...r, [property]: property === 'threshold' ? Number(value) : value } : r);
+        const updatedRules = fieldSettings[ruleType].map(r => {
+            if (r.id === ruleId) {
+                if (property === 'threshold') {
+                    const numValue = parseFloat(value);
+                    return { ...r, [property]: isNaN(numValue) ? 0 : numValue };
+                }
+                return { ...r, [property]: value };
+            }
+            return r;
+        });
         updateFieldSettings(fieldName, { ...fieldSettings, [ruleType]: updatedRules });
     };
 
     const handleAddRule = (fieldName: string, ruleType: 'textColorRules' | 'backgroundColorRules') => {
         const fieldSettings = getFieldSettings(fieldName);
-        const newRule: ThresholdRule = { id: `rule_${Date.now()}`, operator: '>', threshold: 0, color: ruleType === 'textColorRules' ? '#000000' : '#ef4444' };
+        const newRule: ThresholdRule = { 
+            id: `rule_${Date.now()}_${Math.random()}`, 
+            operator: '>', 
+            threshold: 0.01, 
+            color: ruleType === 'textColorRules' ? '#000000' : '#ef4444' 
+        };
         updateFieldSettings(fieldName, { ...fieldSettings, [ruleType]: [...fieldSettings[ruleType], newRule] });
     };
 
@@ -285,18 +312,32 @@ const ColorSettingsPopover = memo(({ groupName, teamNames, settings, onSave }: {
 
     const handleSave = async () => {
         setLoading(true);
-        const groupSettings = localSettings[representativeTeam] || {};
-        const newSettingsForAllTeams = JSON.parse(JSON.stringify(settings));
-        teamNames.forEach(teamName => { newSettingsForAllTeams[teamName] = groupSettings; });
         try {
-            const response = await fetch('/api/team-color-settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ teamNames, settings: groupSettings }) });
-            if (!response.ok) throw new Error('Failed to save settings');
+            const groupSettings = localSettings[representativeTeam] || {};
+            
+            // Apply settings to all teams in the group
+            const newSettingsForAllTeams = { ...settings };
+            teamNames.forEach(teamName => { 
+                newSettingsForAllTeams[teamName] = { ...groupSettings }; 
+            });
+            
+            const response = await fetch('/api/team-color-settings', { 
+                method: 'POST', 
+                headers: { 'Content-Type': 'application/json' }, 
+                body: JSON.stringify({ teamNames, settings: groupSettings }) 
+            });
+            
+            if (!response.ok) {
+                const errorData = await response.text();
+                throw new Error(`Failed to save settings: ${errorData}`);
+            }
+            
             onSave(newSettingsForAllTeams);
             toast.success(`บันทึกการตั้งค่าสำหรับกลุ่ม ${groupName} สำเร็จแล้ว`);
             setOpen(false);
         } catch (error) {
             console.error('Error saving color settings:', error);
-            toast.error('เกิดข้อผิดพลาดในการบันทึก');
+            toast.error(`เกิดข้อผิดพลาดในการบันทึก: ${error instanceof Error ? error.message : 'Unknown error'}`);
         } finally {
             setLoading(false);
         }
@@ -304,10 +345,15 @@ const ColorSettingsPopover = memo(({ groupName, teamNames, settings, onSave }: {
     
     return (
         <Popover open={open} onOpenChange={setOpen}>
-            <PopoverTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-accent hover:text-accent-foreground"><Settings className="h-4 w-4" /></Button></PopoverTrigger>
-            <PopoverContent className="w-[520px] max-h-[80vh] flex flex-col p-4" align="start" side="bottom">
+            <PopoverTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-accent hover:text-accent-foreground">
+                    <Settings className="h-4 w-4" />
+                </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[600px] max-h-[80vh] flex flex-col p-4" align="start" side="bottom">
                 <div className="space-y-4 flex-grow overflow-y-auto pr-2">
-                    <h4 className="font-medium">ตั้งค่าสีสำหรับกลุ่ม: {groupName}</h4>
+                    <h4 className="font-medium text-lg">ตั้งค่าสีสำหรับกลุ่ม: {groupName}</h4>
+                    <p className="text-sm text-muted-foreground">การตั้งค่านี้จะใช้กับทีมทั้งหมดในกลุ่ม: {teamNames.join(', ')}</p>
                     <div className="space-y-4">
                         {Object.entries(allConfigurableFields).map(([key, { name, unit }]) => {
                             const currentFieldSettings = getFieldSettings(key);
@@ -315,34 +361,66 @@ const ColorSettingsPopover = memo(({ groupName, teamNames, settings, onSave }: {
                                 <div key={key} className="p-3 border rounded-lg space-y-3">
                                     <h5 className="font-medium text-sm">{name}</h5>
                                     <div className="grid grid-cols-2 gap-4">
-                                        { (['textColorRules', 'backgroundColorRules'] as const).map(ruleType => (
-                                            <div key={ruleType} className="space-y-2 p-2 rounded-md bg-muted/50">
+                                        {(['textColorRules', 'backgroundColorRules'] as const).map(ruleType => (
+                                            <div key={ruleType} className="space-y-2 p-3 rounded-md bg-muted/50">
                                                 <h6 className="text-xs font-semibold text-center">{ruleType === 'textColorRules' ? 'สีข้อความ' : 'สีพื้นหลัง'}</h6>
                                                 {currentFieldSettings[ruleType] && currentFieldSettings[ruleType].map((rule) => (
-                                                    <div key={rule.id} className="flex items-center gap-1">
+                                                    <div key={rule.id} className="flex items-center gap-2">
                                                         <Select value={rule.operator} onValueChange={(value: '>' | '<') => handleRuleChange(key, ruleType, rule.id, 'operator', value)}>
-                                                            <SelectTrigger className="w-16 h-8"><SelectValue /></SelectTrigger>
-                                                            <SelectContent><SelectItem value=">">&gt;</SelectItem><SelectItem value="<">&lt;</SelectItem></SelectContent>
+                                                            <SelectTrigger className="w-16 h-8">
+                                                                <SelectValue />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                <SelectItem value=">">&gt;</SelectItem>
+                                                                <SelectItem value="<">&lt;</SelectItem>
+                                                            </SelectContent>
                                                         </Select>
-                                                        <Input type="number" value={rule.threshold ?? 0} onChange={e => handleRuleChange(key, ruleType, rule.id, 'threshold', e.target.value)} className="w-20 h-8 text-xs" step="0.1" />
-                                                        <span className="text-xs">({unit || 'ค่า'})</span>
-                                                        <Input type="color" value={rule.color} onChange={e => handleRuleChange(key, ruleType, rule.id, 'color', e.target.value)} className="w-10 h-8 p-0.5 rounded cursor-pointer" />
-                                                        <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => handleRemoveRule(key, ruleType, rule.id)}><XCircle className="h-4 w-4 text-red-500"/></Button>
+                                                        <Input 
+                                                            type="number" 
+                                                            value={rule.threshold ?? 0} 
+                                                            onChange={e => handleRuleChange(key, ruleType, rule.id, 'threshold', e.target.value)} 
+                                                            className="w-24 h-8 text-xs" 
+                                                            step="0.01"
+                                                            min="0.01"
+                                                            placeholder="0.01"
+                                                        />
+                                                        <span className="text-xs whitespace-nowrap">({unit || 'ค่า'})</span>
+                                                        <Input 
+                                                            type="color" 
+                                                            value={rule.color} 
+                                                            onChange={e => handleRuleChange(key, ruleType, rule.id, 'color', e.target.value)} 
+                                                            className="w-12 h-8 p-1 rounded cursor-pointer" 
+                                                        />
+                                                        <Button 
+                                                            variant="ghost" 
+                                                            size="icon" 
+                                                            className="h-8 w-8 shrink-0 hover:bg-destructive/10" 
+                                                            onClick={() => handleRemoveRule(key, ruleType, rule.id)}
+                                                        >
+                                                            <XCircle className="h-4 w-4 text-red-500"/>
+                                                        </Button>
                                                     </div>
                                                 ))}
-                                                <Button variant="outline" size="sm" className="w-full h-8 text-xs" onClick={() => handleAddRule(key, ruleType)}>
-                                                    <PlusCircle className="h-4 w-4 mr-2"/> เพิ่มเงื่อนไข
+                                                <Button 
+                                                    variant="outline" 
+                                                    size="sm" 
+                                                    className="w-full h-8 text-xs" 
+                                                    onClick={() => handleAddRule(key, ruleType)}
+                                                >
+                                                    <PlusCircle className="h-3 w-3 mr-1"/> เพิ่มเงื่อนไข
                                                 </Button>
                                             </div>
                                         ))}
                                     </div>
                                 </div>
-                            )
+                            );
                         })}
                     </div>
                 </div>
                 <div className="mt-4 pt-4 border-t flex-shrink-0">
-                    <Button onClick={handleSave} disabled={loading} className="w-full">{loading ? 'กำลังบันทึก...' : 'บันทึกการตั้งค่า'}</Button>
+                    <Button onClick={handleSave} disabled={loading} className="w-full">
+                        {loading ? 'กำลังบันทึก...' : 'บันทึกการตั้งค่า'}
+                    </Button>
                 </div>
             </PopoverContent>
         </Popover>
@@ -479,7 +557,7 @@ export default function AdserPage() {
         const aggregateMonthly = (dailyData: DailyDataPoint[], aggType: 'sum' | 'last') => { const monthly = new Map<string, { total: number, last: number }>(); [...dailyData].sort((a, b) => dayjs(a.date).diff(dayjs(b.date))).forEach(d => { const key = dayjs(d.date).format('YYYY-MM-01'); if (!monthly.has(key)) monthly.set(key, { total: 0, last: 0 }); const month = monthly.get(key)!; month.total += d.value; month.last = d.value; }); return Array.from(monthly.entries()).map(([date, values]) => ({ date, value: aggType === 'sum' ? values.total : values.last })); };
         const transformData = (dataKey: keyof TeamMetric, agg: 'sum' | 'last') => { const map = new Map<string, TransformedChartData>(); graphRawData.forEach(team => { let data = team[dataKey] as DailyDataPoint[] || []; if (graphView === 'monthly') data = aggregateMonthly(data, agg); data.forEach(d => { if (!map.has(d.date)) map.set(d.date, { date: d.date }); map.get(d.date)![team.team_name] = d.value; }); }); return Array.from(map.values()).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()).filter(d => !dayjs(d.date).isAfter(dayjs(), 'day')); };
         const monthlyRatio = (numKey: keyof TeamMetric, denKey: keyof TeamMetric) => { const map = new Map<string, TransformedChartData>(); graphRawData.forEach(team => { const monthly = new Map<string, { num: number, den: number }>(); (team[numKey] as DailyDataPoint[] || []).forEach(d => { const key = dayjs(d.date).format('YYYY-MM-01'); if (!monthly.has(key)) monthly.set(key, { num: 0, den: 0 }); monthly.get(key)!.num += d.value; }); (team[denKey] as DailyDataPoint[] || []).forEach(d => { const key = dayjs(d.date).format('YYYY-MM-01'); if (!monthly.has(key)) monthly.set(key, { num: 0, den: 0 }); monthly.get(key)!.den += d.value; }); monthly.forEach((totals, key) => { if (!map.has(key)) map.set(key, { date: key }); map.get(key)![team.team_name] = totals.den > 0 ? totals.num / totals.den : 0; }); }); return Array.from(map.values()).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()).filter(d => !dayjs(d.date).isAfter(dayjs(), 'day')); };
-        setChartData(graphView === 'monthly' ? { cpm: monthlyRatio('actual_spend_daily', 'total_inquiries_daily'), costPerDeposit: monthlyRatio('actual_spend_daily', 'deposits_count_daily'), deposits: transformData('deposits_count_daily', 'sum'), cover: transformData('one_dollar_per_cover_daily', 'last'), } : { cpm: transformData('cpm_cost_per_inquiry_daily', 'sum'), costPerDeposit: transformData('cost_per_deposit_daily', 'sum'), deposits: transformData('deposits_count_daily', 'sum'), cover: transformData('one_dollar_per_cover_daily', 'last'), });
+        setChartData(graphView === 'monthly' ? { cpm: monthlyRatio('actual_spend_daily', 'total_inquiries_daily'), costPerDeposit: monthlyRatio('actual_spend_daily', 'deposits_count_daily'), deposits: transformData('deposits_count_daily', 'sum'), cover: transformData('one_dollar_per_cover_daily', 'last'), } : { cpm: transformData('cmp_cost_per_inquiry_daily', 'sum'), costPerDeposit: transformData('cost_per_deposit_daily', 'sum'), deposits: transformData('deposits_count_daily', 'sum'), cover: transformData('one_dollar_per_cover_daily', 'last'), });
     }, [graphRawData, graphView]);
 
     const error = tableError || graphError;
